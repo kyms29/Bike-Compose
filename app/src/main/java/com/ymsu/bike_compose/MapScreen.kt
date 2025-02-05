@@ -24,7 +24,7 @@ import com.google.maps.android.compose.rememberMarkerState
 import com.ymsu.bike_compose.theme.AppTheme
 
 @Composable
-fun MapScreen() {
+fun MapScreen(viewModel: MainViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -33,6 +33,12 @@ fun MapScreen() {
         val singapore = LatLng(1.3521, 103.8198) // 指定一個位置
         val cameraPositionState = rememberCameraPositionState {
             position = CameraPosition.fromLatLngZoom(singapore, 12f)
+        }
+
+        val stationList by viewModel.stationList.collectAsState(initial = emptyList())
+
+        stationList.forEach {
+            Log.d("[MapScreen]", "stationList => $it")
         }
 
         GoogleMap(
@@ -51,7 +57,8 @@ fun MapScreen() {
 @Preview(showBackground = true)
 @Composable
 fun previewMap(){
+    val viewModel = MainViewModel()
     AppTheme {
-        MapScreen()
+        MapScreen(viewModel)
     }
 }

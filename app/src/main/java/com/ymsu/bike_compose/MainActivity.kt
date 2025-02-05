@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
 fun BikeComposeApp() {
     AppTheme {
         val navController = rememberNavController()
+        val viewModel: MainViewModel = viewModel()
 
         Scaffold(
             bottomBar = {
@@ -47,7 +48,7 @@ fun BikeComposeApp() {
                 startDestination = "Map",
                 modifier = Modifier.padding(paddingValues)
             ) {
-                composable("Map") { MapScreen() }
+                composable("Map") { MapScreen(viewModel) }
                 composable("Favorite") { FavoriteScreen() }
                 composable("Settings") { SettingsScreen() }
             }
