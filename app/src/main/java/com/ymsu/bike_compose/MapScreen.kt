@@ -30,6 +30,11 @@ fun MapScreen(viewModel: MainViewModel) {
             .fillMaxSize()
             .padding(16.dp)
     ) {
+        /*
+            TODO:
+             2. 有網路才能取得目前位置 並移到該位置
+             3. 根據目前位置畫出周遭X公尺的站點資訊
+         */
         val singapore = LatLng(1.3521, 103.8198) // 指定一個位置
         val cameraPositionState = rememberCameraPositionState {
             position = CameraPosition.fromLatLngZoom(singapore, 12f)

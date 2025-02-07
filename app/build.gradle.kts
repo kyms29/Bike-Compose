@@ -105,4 +105,7 @@ dependencies {
 
     // OkHttp for logging
     implementation("com.squareup.okhttp3:logging-interceptor:4.11.0")
+
+    implementation ("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
+    implementation ("androidx.compose.runtime:runtime-livedata:1.5.2")
 }
