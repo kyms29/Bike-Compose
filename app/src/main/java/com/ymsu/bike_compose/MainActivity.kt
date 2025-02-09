@@ -3,8 +3,6 @@ package com.ymsu.bike_compose
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.net.NetworkRequest
-import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -20,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.BottomNavigation
 import androidx.compose.material.BottomNavigationItem
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material.ContentAlpha
 import androidx.compose.material3.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
@@ -39,30 +36,111 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat.getSystemService
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.google.accompanist.permissions.shouldShowRationale
 
 class MainActivity : ComponentActivity() {
     private val hasNetwork = MutableLiveData(true)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         isNetworkConnect()
         setContent {
+            CheckPermissions()
             BikeComposeApp(hasNetwork, onRetry = { isNetworkConnect() })
+
+        }
+    }
+
+    @Composable
+    private fun GoToSettingsDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+        AlertDialog(
+            onDismissRequest = { onDismiss() },
+            title = { Text("需要位置權限") },
+            text = { Text("應用程式需要使用精確位置，請至設定給予位置權限") },
+            confirmButton = {
+                Button(
+                    onClick = onConfirm,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                )
+                { Text(text = "前往設定", color = MaterialTheme.colorScheme.surfaceVariant) }
+            },
+            dismissButton = {
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                )
+                { Text(text = "取消", color = MaterialTheme.colorScheme.surfaceVariant) }
+            }
+        )
+    }
+
+    private fun goToSettingsPage() {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", packageName, null)
+        }
+        startActivity(intent)
+    }
+
+    @OptIn(ExperimentalPermissionsApi::class)
+    @Composable
+    private fun CheckPermissions() {
+        val locationPermissionsState = rememberMultiplePermissionsState(
+            listOf(
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            )
+        )
+        var showSettingDialog by remember { mutableStateOf(false) }
+
+        LaunchedEffect(Unit) {
+            locationPermissionsState.launchMultiplePermissionRequest()
+        }
+
+        // isGranted means use grant or not, shouldShowRationale means user choose denied
+        val shouldShowSettingDialog = locationPermissionsState.permissions.any {
+            !it.status.isGranted && !it.status.shouldShowRationale
+        }
+
+        LaunchedEffect(shouldShowSettingDialog) {
+            if (shouldShowSettingDialog) {
+                showSettingDialog = true
+            }
+        }
+
+        if (showSettingDialog) {
+            GoToSettingsDialog(
+                onDismiss = { showSettingDialog = false },
+                onConfirm = { goToSettingsPage() }
+            )
         }
     }
 
     private fun isNetworkConnect() {
         Log.d("[MainActivity]", "isNetworkConnect function called ")
-        val connectivityManager = baseContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val connectivityManager =
+            baseContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network = connectivityManager.activeNetwork
         val capabilities = connectivityManager.getNetworkCapabilities(network)
         val status = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true ||
@@ -105,7 +183,11 @@ fun BikeComposeApp(hasNetwork: LiveData<Boolean>, onRetry: () -> Unit) {
                         modifier = Modifier.align(Alignment.Center),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(text = "No network connected! Please turn on network", color = Color.White, fontSize = 16.sp)
+                        Text(
+                            text = "No network connected! Please turn on network",
+                            color = Color.White,
+                            fontSize = 16.sp
+                        )
                         Spacer(modifier = Modifier.height(10.dp))
                         Button(
                             onClick = { onRetry() },
