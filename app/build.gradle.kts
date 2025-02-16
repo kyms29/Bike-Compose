@@ -76,7 +76,7 @@ dependencies {
 
     // Choose one of the following:
     // Material Design 3
-    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material3:material3:1.2.0")
     // or Material Design 2
     implementation("androidx.compose.material:material")
     // or skip Material Design and build directly on top of foundational components
@@ -110,4 +110,9 @@ dependencies {
     implementation ("androidx.compose.runtime:runtime-livedata:1.5.2")
 
     implementation("com.google.accompanist:accompanist-permissions:0.37.0")
+
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+
+    // Material Icons
+    implementation("androidx.compose.material:material-icons-extended:1.7.7")
 }

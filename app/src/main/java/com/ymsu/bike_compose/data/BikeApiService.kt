@@ -7,15 +7,22 @@ import okhttp3.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
+import retrofit2.http.Query
 
 interface BikeApiService {
-    @GET("Bike/Station/City/NewTaipei")
+    @GET("api/basic/Bike/Station/City/NewTaipei")
     suspend fun getStationInfo(): List<StationInfoItem>
-    @GET("Bike/Availability/City/NewTaipei")
+    @GET("api/basic/Bike/Availability/City/NewTaipei")
     suspend fun getAvailableInfo() : List<AvailableInfoItem>
 
+    @GET("api/advanced/v2/Bike/Station/NearBy")
+    suspend fun getStationInfoNearBy(@Query("\$spatialFilter") nearBy: String): List<StationInfoItem>
+
+    @GET("api/advanced/v2/Bike/Availability/NearBy")
+    suspend fun getAvailabilityInfoNearBy(@Query("\$spatialFilter") nearBy: String): List<AvailableInfoItem>
+
     companion object {
-        private const val TDX_URL = "https://tdx.transportdata.tw/api/basic/v2/"
+        private const val TDX_URL = "https://tdx.transportdata.tw/"
 
         fun create(): BikeApiService {
             val tokenManager = TokenManager

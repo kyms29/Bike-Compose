@@ -53,13 +53,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.accompanist.permissions.shouldShowRationale
 
+private const val TAG = "[MainActivity]"
+
 class MainActivity : ComponentActivity() {
+
     private val hasNetwork = MutableLiveData(true)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -138,7 +140,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun isNetworkConnect() {
-        Log.d("[MainActivity]", "isNetworkConnect function called ")
+        Log.d(TAG, "isNetworkConnect function called ")
         val connectivityManager =
             baseContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network = connectivityManager.activeNetwork
@@ -171,7 +173,7 @@ fun BikeComposeApp(hasNetwork: LiveData<Boolean>, onRetry: () -> Unit) {
                 composable("Settings") { SettingsScreen() }
             }
 
-            Log.d("[MainActivity]", "[BikeComposeApp] networkStatus = $networkStatus")
+            Log.d(TAG, "[BikeComposeApp] networkStatus = $networkStatus")
 
             if (!networkStatus) {
                 Box(modifier = Modifier
