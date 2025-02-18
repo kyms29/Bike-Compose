@@ -1,22 +1,20 @@
 package com.ymsu.bike_compose
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -26,25 +24,20 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material.Icon
 import androidx.compose.material.Surface
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsBike
 import androidx.compose.material.icons.filled.ElectricBolt
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocalParking
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,20 +49,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.vectorResource
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptor
@@ -146,6 +132,9 @@ fun MapScreen(viewModel: MainViewModel) {
         var selectedFullyStationInfo by remember { mutableStateOf(FullyStationInfo(StationInfoItem(), AvailableInfoItem())) }
         var selectedMarker by remember { mutableStateOf<LatLng?>(null) }
         val markerSizes = remember { mutableStateMapOf<LatLng,Float>() }
+        val isFavorite by remember {
+            mutableStateOf(selectedFullyStationInfo.isFavorite)
+        }
 
         Box(modifier = Modifier.fillMaxSize()) {
             GoogleMap(
@@ -163,8 +152,8 @@ fun MapScreen(viewModel: MainViewModel) {
                     strokeColor = Color.LightGray.copy(alpha = 0.5f),
                     radius = 1000.0
                 )
-
-                combinedInfo.forEach { (stationInfo, availableInfo) ->
+                Log.d(TAG,"Trigger recompose combined info")
+                combinedInfo.forEach { (stationInfo, availableInfo,isFavorite) ->
                     val icon = getRateIcon(availableInfo.AvailableRentBikes, availableInfo.AvailableReturnBikes)
                     val markerPosition = LatLng(
                         stationInfo.StationPosition.PositionLat,
@@ -177,9 +166,9 @@ fun MapScreen(viewModel: MainViewModel) {
                         title = stationInfo.StationName.Zh_tw,
                         onClick = {
                             selectedMarker = markerPosition
-                            markerSizes[markerPosition] = 1.5f
+                            markerSizes[markerPosition] = 1.3f
                             showStationInfo = true
-                            selectedFullyStationInfo = FullyStationInfo(stationInfo, availableInfo)
+                            selectedFullyStationInfo = FullyStationInfo(stationInfo, availableInfo,isFavorite)
                             true
                         },
                         icon = vectorToBitmapDescriptor(
@@ -192,18 +181,49 @@ fun MapScreen(viewModel: MainViewModel) {
             }
 
             if (showStationInfo) {
-                BottomSheetDialog(selectedFullyStationInfo,
+                Log.d(TAG,"showStationInfo")
+                BottomSheetDialog(viewModel,selectedFullyStationInfo,
                     onDismiss = {
                         showStationInfo = false
                         selectedMarker?.let { markerSizes[it] = 1f }
                         selectedMarker = null
+                    },
+                    onFavoriteClick = {
+                        viewModel.clickFavorite(selectedFullyStationInfo.stationInfoItem.StationUID)
+                    },
+                    onShareClick = {
+                        val sendIntent: Intent = Intent().apply {
+                            val mapUri =
+                                "https://www.google.com/maps/dir/?api=1&destination=" + selectedFullyStationInfo.stationInfoItem.StationPosition.PositionLat + ","
+                            + selectedFullyStationInfo.stationInfoItem.StationPosition.PositionLon
+                            action = Intent.ACTION_SEND
+                            putExtra(
+                                Intent.EXTRA_TEXT,
+                                selectedFullyStationInfo.stationInfoItem.StationName.Zh_tw + "有" + selectedFullyStationInfo.availableInfoItem.AvailableRentBikes.toString() + "可借" +
+                                        selectedFullyStationInfo.availableInfoItem.AvailableReturnBikes.toString() + "可還"
+                                        + "，地點在$mapUri"
+                            )
+                            type = "text/plain"
+                        }
+                        sendIntent.putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.share_subject))
+                        val shareIntent = Intent.createChooser(sendIntent, null)
+                        context.startActivity(shareIntent)
+                    },
+                    onNavigateClick = {
+                        val gmmIntentUri =
+                            Uri.parse("google.navigation:q=" + selectedFullyStationInfo.stationInfoItem.StationPosition.PositionLat + "," + selectedFullyStationInfo.stationInfoItem.StationPosition.PositionLon + "&mode=w")
+                        val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
+                        mapIntent.setPackage("com.google.android.apps.maps")
+                        context.startActivity(mapIntent)
                     }
                 )
             }
 
             FloatingActionButton(
                 onClick = { cameraPositionState.move(CameraUpdateFactory.newLatLngZoom(currentLocation,16f))},
-                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
                 shape = CircleShape,
                 containerColor = Color.White){
                 Icon(imageVector = Icons.Default.MyLocation, contentDescription = "mylocation")
@@ -212,44 +232,12 @@ fun MapScreen(viewModel: MainViewModel) {
     }
 }
 
-private fun getRateIcon(availableRent: Int = 0, availableReturn: Int = 0): Int {
-    val availableRate =
-        ((availableRent.toFloat() / (availableRent.toFloat() + availableReturn.toFloat())) * 100).toInt()
-
-    return when {
-        availableRate == 0 -> R.drawable.ic_ubike_icon_0
-        availableRate <= 10 -> R.drawable.ic_ubike_icon_10
-        availableRate <= 20 -> R.drawable.ic_ubike_icon_20
-        availableRate <= 30 -> R.drawable.ic_ubike_icon_30
-        availableRate <= 40 -> R.drawable.ic_ubike_icon_40
-        availableRate <= 50 -> R.drawable.ic_ubike_icon_50
-        availableRate <= 60 -> R.drawable.ic_ubike_icon_60
-        availableRate <= 70 -> R.drawable.ic_ubike_icon_70
-        availableRate <= 80 -> R.drawable.ic_ubike_icon_80
-        availableRate <= 90 -> R.drawable.ic_ubike_icon_90
-        else -> R.drawable.ic_ubike_icon_100
-    }
-}
-
-@Composable
-fun vectorToBitmapDescriptor(vectorResId: Int, context: Context, scale: Float = 1f): BitmapDescriptor {
-    val vectorDrawable = ContextCompat.getDrawable(context, vectorResId) ?: return BitmapDescriptorFactory.defaultMarker()
-
-    val bitmap = Bitmap.createBitmap(
-        (vectorDrawable.intrinsicWidth*scale).toInt(),
-        (vectorDrawable.intrinsicHeight*scale).toInt(),
-        Bitmap.Config.ARGB_8888
-    )
-    val canvas = Canvas(bitmap)
-    vectorDrawable.setBounds(0, 0, canvas.width, canvas.height)
-    vectorDrawable.draw(canvas)
-
-    return BitmapDescriptorFactory.fromBitmap(bitmap)
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BottomSheetDialog(fullyStationInfo: FullyStationInfo, onDismiss: () -> Unit) {
+private fun BottomSheetDialog(
+    viewModel: MainViewModel, fullyStationInfo: FullyStationInfo,
+    onDismiss: () -> Unit, onFavoriteClick: () -> Unit, onShareClick: () -> Unit, onNavigateClick: () -> Unit
+) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -259,7 +247,7 @@ private fun BottomSheetDialog(fullyStationInfo: FullyStationInfo, onDismiss: () 
         contentWindowInsets = { WindowInsets(0.dp) }
     ) {
         DialogContent(fullyStationInfo)
-        BottomRowContent()
+        BottomRowContent(viewModel,fullyStationInfo,onFavoriteClick,onShareClick,onNavigateClick)
     }
 }
 
@@ -272,10 +260,13 @@ private fun DialogContent(fullyStationInfo: FullyStationInfo) {
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             Box(modifier = Modifier.weight(1f) ) {
-                Box(modifier = Modifier.width(100.dp)
+                Box(modifier = Modifier
+                    .width(100.dp)
                     .background(color = MaterialTheme.colorScheme.background, shape = RoundedCornerShape(8.dp))){
                     Text(
-                        modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 20.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 20.dp, bottom = 20.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
                         text = fullyStationInfo.availableInfoItem.AvailableRentBikesDetail.GeneralBikes.toString()+"可借"
@@ -285,15 +276,18 @@ private fun DialogContent(fullyStationInfo: FullyStationInfo) {
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .offset(x = 10.dp, y = (-10).dp)
-                        .background(shape = RoundedCornerShape(16.dp), color =  MaterialTheme.colorScheme.background)
+                        .background(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.background)
                         .padding(2.dp))
             }
 
             Box(modifier = Modifier.weight(1f) ) {
-                Box(modifier = Modifier.width(100.dp)
+                Box(modifier = Modifier
+                    .width(100.dp)
                     .background(color = MaterialTheme.colorScheme.background, shape = RoundedCornerShape(8.dp))) {
                     Text(
-                        modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 20.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 20.dp, bottom = 20.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
                         text = fullyStationInfo.availableInfoItem.AvailableRentBikesDetail.ElectricBikes.toString()+"可借"
@@ -303,15 +297,18 @@ private fun DialogContent(fullyStationInfo: FullyStationInfo) {
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .offset(x = 10.dp, y = (-10).dp)
-                        .background(shape = RoundedCornerShape(16.dp), color =  MaterialTheme.colorScheme.background)
+                        .background(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.background)
                         .padding(2.dp))
             }
 
             Box(modifier = Modifier.weight(1f) ) {
-                Row(modifier = Modifier.width(100.dp)
+                Row(modifier = Modifier
+                    .width(100.dp)
                     .background(color = orange, shape = RoundedCornerShape(8.dp))) {
                     Text(
-                        modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 20.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 20.dp, bottom = 20.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
                         text = fullyStationInfo.availableInfoItem.AvailableReturnBikes.toString()+"可還"
@@ -343,52 +340,100 @@ private fun DialogContent(fullyStationInfo: FullyStationInfo) {
 }
 
 @Composable
-private fun BottomRowContent() {
+private fun BottomRowContent(viewModel: MainViewModel,fullyStationInfo: FullyStationInfo, onFavoriteClick: () -> Unit, onShareClick: () -> Unit, onNavigateClick: () -> Unit) {
+    var isFavorite by remember {
+        mutableStateOf(fullyStationInfo.isFavorite)
+    }
+    Log.d(TAG,"[BottomRowContent] Create or recompose , isFavorite = ${fullyStationInfo.isFavorite}")
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Button(
-            onClick = { /*TODO*/ },
+            onClick = { onFavoriteClick()
+                isFavorite = !isFavorite},
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column {
-                Image(imageVector = Icons.Default.Favorite, contentDescription = "favorite")
+                Icon(imageVector = Icons.Default.Favorite , contentDescription = "favorite", tint = if (isFavorite) Color.Red else Color.Unspecified)
                 Text(text = "收藏", color = MaterialTheme.colorScheme.secondary)
             }
         }
 
         Button(
-            onClick = { /*TODO*/ },
+            onClick = { onShareClick() },
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column {
-                Image(imageVector = Icons.Default.Share, contentDescription = "share")
+                Icon(imageVector = Icons.Default.Share, contentDescription = "share")
                 Text(text = "分享", color = MaterialTheme.colorScheme.secondary)
             }
         }
 
         Button(
-            onClick = { /*TODO*/ },
+            onClick = { onNavigateClick() },
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column {
-                Image(imageVector = Icons.Default.Navigation, contentDescription = "navigation")
+                Icon(imageVector = Icons.Default.Navigation, contentDescription = "navigation")
                 Text(text = "導航", color = MaterialTheme.colorScheme.secondary)
             }
         }
     }
 }
+
+@Composable
+private fun getRateIcon(availableRent: Int = 0, availableReturn: Int = 0): Int {
+    return remember(availableRent,availableReturn) {
+        val availableRate =
+            ((availableRent.toFloat() / (availableRent.toFloat() + availableReturn.toFloat())) * 100).toInt()
+
+        when {
+            availableRate == 0 -> R.drawable.ic_ubike_icon_0
+            availableRate <= 10 -> R.drawable.ic_ubike_icon_10
+            availableRate <= 20 -> R.drawable.ic_ubike_icon_20
+            availableRate <= 30 -> R.drawable.ic_ubike_icon_30
+            availableRate <= 40 -> R.drawable.ic_ubike_icon_40
+            availableRate <= 50 -> R.drawable.ic_ubike_icon_50
+            availableRate <= 60 -> R.drawable.ic_ubike_icon_60
+            availableRate <= 70 -> R.drawable.ic_ubike_icon_70
+            availableRate <= 80 -> R.drawable.ic_ubike_icon_80
+            availableRate <= 90 -> R.drawable.ic_ubike_icon_90
+            else -> R.drawable.ic_ubike_icon_100
+        }
+    }
+}
+
+@Composable
+fun vectorToBitmapDescriptor(vectorResId: Int, context: Context, scale: Float = 1f): BitmapDescriptor {
+    return remember(vectorResId, context, scale)  {
+        val vectorDrawable = ContextCompat.getDrawable(context, vectorResId) ?: return@remember BitmapDescriptorFactory.defaultMarker()
+
+        val bitmap = Bitmap.createBitmap(
+            (vectorDrawable.intrinsicWidth*scale).toInt(),
+            (vectorDrawable.intrinsicHeight*scale).toInt(),
+            Bitmap.Config.ARGB_8888
+        )
+        val canvas = Canvas(bitmap)
+        vectorDrawable.setBounds(0, 0, canvas.width, canvas.height)
+        vectorDrawable.draw(canvas)
+
+        BitmapDescriptorFactory.fromBitmap(bitmap)
+    }
+}
+
+
 
 @Preview(showBackground = true)
 @Composable
@@ -409,15 +454,15 @@ fun PreviewBottomSheetDialog() {
 @Composable
 fun PreviewBottomRowContent() {
     AppTheme {
-        BottomRowContent()
+//        BottomRowContent(fullyStationInfo = FullyStationInfo(StationInfoItem(),AvailableInfoItem()), onFavoriteClick = {}, onShareClick = {}, onNavigateClick = {})
     }
 }
 
 @Preview(showBackground = true)
 @Composable
 fun PreviewMap() {
-    val viewModel = MainViewModel()
-    AppTheme {
-        MapScreen(viewModel)
-    }
+//    val viewModel = MainViewModel()
+//    AppTheme {
+//        MapScreen(viewModel)
+//    }
 }
