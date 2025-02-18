@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
     id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
+    id ("kotlin-kapt")
 }
 
 android {
@@ -66,6 +67,8 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
     implementation("androidx.navigation:navigation-compose:2.8.6")
+//    implementation(libs.androidx.room.common)
+//    implementation(libs.androidx.room.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -75,6 +78,7 @@ dependencies {
     androidTestImplementation(composeBom)
 
     // Choose one of the following:
+
     // Material Design 3
     implementation("androidx.compose.material3:material3:1.2.0")
     // or Material Design 2
@@ -115,4 +119,8 @@ dependencies {
 
     // Material Icons
     implementation("androidx.compose.material:material-icons-extended:1.7.7")
+
+    implementation ("androidx.room:room-runtime:2.6.1")
+    kapt ("androidx.room:room-compiler:2.6.1")
+    implementation ("androidx.room:room-ktx:2.6.1")
 }

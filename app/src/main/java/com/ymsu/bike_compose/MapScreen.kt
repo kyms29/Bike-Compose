@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.location.Location
+import android.location.LocationManager
 import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.Image
@@ -55,7 +57,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptor
@@ -132,9 +136,6 @@ fun MapScreen(viewModel: MainViewModel) {
         var selectedFullyStationInfo by remember { mutableStateOf(FullyStationInfo(StationInfoItem(), AvailableInfoItem())) }
         var selectedMarker by remember { mutableStateOf<LatLng?>(null) }
         val markerSizes = remember { mutableStateMapOf<LatLng,Float>() }
-        val isFavorite by remember {
-            mutableStateOf(selectedFullyStationInfo.isFavorite)
-        }
 
         Box(modifier = Modifier.fillMaxSize()) {
             GoogleMap(
@@ -182,7 +183,11 @@ fun MapScreen(viewModel: MainViewModel) {
 
             if (showStationInfo) {
                 Log.d(TAG,"showStationInfo")
-                BottomSheetDialog(viewModel,selectedFullyStationInfo,
+                val currentLocation = Location(LocationManager.NETWORK_PROVIDER).apply {
+                    latitude = currentLocation.latitude
+                    longitude = currentLocation.longitude
+                }
+                BottomSheetDialog(currentLocation,viewModel,selectedFullyStationInfo,
                     onDismiss = {
                         showStationInfo = false
                         selectedMarker?.let { markerSizes[it] = 1f }
@@ -234,7 +239,7 @@ fun MapScreen(viewModel: MainViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BottomSheetDialog(
+private fun BottomSheetDialog(currentLocation: Location,
     viewModel: MainViewModel, fullyStationInfo: FullyStationInfo,
     onDismiss: () -> Unit, onFavoriteClick: () -> Unit, onShareClick: () -> Unit, onNavigateClick: () -> Unit
 ) {
@@ -246,13 +251,13 @@ private fun BottomSheetDialog(
         shape = RectangleShape,
         contentWindowInsets = { WindowInsets(0.dp) }
     ) {
-        DialogContent(fullyStationInfo)
-        BottomRowContent(viewModel,fullyStationInfo,onFavoriteClick,onShareClick,onNavigateClick)
+        DialogContent(fullyStationInfo,currentLocation)
+        BottomRowContent(fullyStationInfo,onFavoriteClick,onShareClick,onNavigateClick)
     }
 }
 
 @Composable
-private fun DialogContent(fullyStationInfo: FullyStationInfo) {
+private fun DialogContent(fullyStationInfo: FullyStationInfo,currentLocation: Location) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -323,6 +328,24 @@ private fun DialogContent(fullyStationInfo: FullyStationInfo) {
             }
         }
 
+        Row(modifier = Modifier.fillMaxWidth().padding(end = 10.dp)) {
+            Text(
+                modifier = Modifier.padding(top = 20.dp).weight(1f),
+                text = "N秒前更新", color = MaterialTheme.colorScheme.surfaceVariant,
+                fontSize = 12.sp
+            )
+
+            val distance = getStationDistance(current = currentLocation,
+                stationLatLng = LatLng(fullyStationInfo.stationInfoItem.StationPosition.PositionLat, fullyStationInfo.stationInfoItem.StationPosition.PositionLon)
+            )
+            Text(
+                modifier = Modifier.padding(top = 20.dp).weight(1f),
+                text = "距離$distance", color = MaterialTheme.colorScheme.surfaceVariant,
+                fontSize = 12.sp,
+                textAlign = TextAlign.End
+            )
+        }
+
         Text(
             modifier = Modifier.padding(top = 20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
@@ -333,14 +356,12 @@ private fun DialogContent(fullyStationInfo: FullyStationInfo) {
             color = MaterialTheme.colorScheme.surfaceVariant,
             text = fullyStationInfo.stationInfoItem.StationAddress.Zh_tw
         )
-
-        Text(modifier = Modifier.padding(top = 20.dp), text = "距離N公尺", color = MaterialTheme.colorScheme.surfaceVariant)
     }
 
 }
 
 @Composable
-private fun BottomRowContent(viewModel: MainViewModel,fullyStationInfo: FullyStationInfo, onFavoriteClick: () -> Unit, onShareClick: () -> Unit, onNavigateClick: () -> Unit) {
+private fun BottomRowContent(fullyStationInfo: FullyStationInfo, onFavoriteClick: () -> Unit, onShareClick: () -> Unit, onNavigateClick: () -> Unit) {
     var isFavorite by remember {
         mutableStateOf(fullyStationInfo.isFavorite)
     }
@@ -433,14 +454,33 @@ fun vectorToBitmapDescriptor(vectorResId: Int, context: Context, scale: Float = 
     }
 }
 
+private fun getStationDistance(stationLatLng: LatLng, current: Location): String {
+    var stationLocation = Location(LocationManager.NETWORK_PROVIDER).apply {
+        latitude = stationLatLng.latitude
+        longitude = stationLatLng.longitude
+    }
+
+    val distance = stationLocation.distanceTo(current)
+
+    return if (distance > 1000) {
+        "%.2f".format(distance / 1000).toString() + "公里"
+    } else {
+        distance.toInt().toString() + "公尺"
+    }
+}
+
 
 
 @Preview(showBackground = true)
 @Composable
 fun PreviewBottomSheetDialog() {
+    val currentLocation = Location(LocationManager.NETWORK_PROVIDER).apply {
+        latitude = 0.0
+        longitude = 0.0
+    }
     AppTheme {
         Surface(color = MaterialTheme.colorScheme.onPrimaryContainer) {
-            DialogContent(
+            DialogContent(currentLocation = currentLocation,
                 fullyStationInfo = FullyStationInfo(
                     StationInfoItem(StationAddress = StationAddress(Zh_tw = "測試地址用"), StationName = StationName(Zh_tw = "測試站名用")),
                     AvailableInfoItem()
@@ -454,7 +494,7 @@ fun PreviewBottomSheetDialog() {
 @Composable
 fun PreviewBottomRowContent() {
     AppTheme {
-//        BottomRowContent(fullyStationInfo = FullyStationInfo(StationInfoItem(),AvailableInfoItem()), onFavoriteClick = {}, onShareClick = {}, onNavigateClick = {})
+        BottomRowContent(fullyStationInfo = FullyStationInfo(StationInfoItem(),AvailableInfoItem()), onFavoriteClick = {}, onShareClick = {}, onNavigateClick = {})
     }
 }
 

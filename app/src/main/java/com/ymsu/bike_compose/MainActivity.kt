@@ -70,9 +70,7 @@ class MainActivity : ComponentActivity() {
 
         isNetworkConnect()
         setContent {
-            CheckPermissions()
-            BikeComposeApp(viewModel,hasNetwork, onRetry = { isNetworkConnect() })
-
+            CheckPermissions(viewModel,hasNetwork, onRetry = { isNetworkConnect() })
         }
     }
 
@@ -108,7 +106,11 @@ class MainActivity : ComponentActivity() {
 
     @OptIn(ExperimentalPermissionsApi::class)
     @Composable
-    private fun CheckPermissions() {
+    private fun CheckPermissions(
+        viewModel: MainViewModel,
+        hasNetwork: MutableLiveData<Boolean>,
+        onRetry: () -> Unit
+    ) {
         val locationPermissionsState = rememberMultiplePermissionsState(
             listOf(
                 Manifest.permission.ACCESS_COARSE_LOCATION,
@@ -116,6 +118,7 @@ class MainActivity : ComponentActivity() {
             )
         )
         var showSettingDialog by remember { mutableStateOf(false) }
+        var isPermissionGranted by remember { mutableStateOf(false) }
 
         LaunchedEffect(Unit) {
             locationPermissionsState.launchMultiplePermissionRequest()
@@ -137,6 +140,17 @@ class MainActivity : ComponentActivity() {
                 onDismiss = { showSettingDialog = false },
                 onConfirm = { goToSettingsPage() }
             )
+        }
+
+        isPermissionGranted = locationPermissionsState.permissions.all { it.status.isGranted }
+
+        if (isPermissionGranted) {
+            BikeComposeApp(viewModel, hasNetwork, onRetry)
+        } else {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).clickable(enabled = false) {  },
+                contentAlignment = Alignment.Center) {
+                Text("Need granted location permissions!")
+            }
         }
     }
 
