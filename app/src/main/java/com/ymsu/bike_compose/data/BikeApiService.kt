@@ -10,7 +10,7 @@ import retrofit2.http.GET
 import retrofit2.http.Query
 
 interface BikeApiService {
-    @GET("api/basic/Bike/Station/City/NewTaipei")
+    @GET("api/basic/Bike/Station/All/")
     suspend fun getStationInfo(): List<StationInfoItem>
     @GET("api/basic/Bike/Availability/City/NewTaipei")
     suspend fun getAvailableInfo() : List<AvailableInfoItem>

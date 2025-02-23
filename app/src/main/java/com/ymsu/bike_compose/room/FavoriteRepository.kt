@@ -1,6 +1,9 @@
 package com.ymsu.bike_compose.room
 
 import android.util.Log
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 
 class FavoriteRepository(private val dao: FavoriteStationDao) {
     private val TAG = "[FavoriteRepository]"
@@ -18,9 +21,5 @@ class FavoriteRepository(private val dao: FavoriteStationDao) {
         return dao.isFavorite(stationUID) != null
     }
 
-    suspend fun getAll(): Set<String>{
-        val favoriteStations = dao.getAll()
-        Log.d(TAG,"[getALL] Data = "+favoriteStations.map { it.stationUid }.toString())
-        return favoriteStations.map { it.stationUid }.toSet()
-    }
+    fun getAll() = dao.getAll()
 }

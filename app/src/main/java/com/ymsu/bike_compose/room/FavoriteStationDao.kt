@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface FavoriteStationDao {
@@ -18,5 +19,5 @@ interface FavoriteStationDao {
     suspend fun removeFavorite(id: String)
 
     @Query("SELECT * FROM favoriteStation")
-    suspend fun getAll(): List<FavoriteStation>
+    fun getAll(): Flow<List<FavoriteStation>>
 }

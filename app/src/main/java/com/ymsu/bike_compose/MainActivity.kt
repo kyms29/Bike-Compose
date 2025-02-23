@@ -57,9 +57,11 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.accompanist.permissions.shouldShowRationale
 import com.ymsu.bike_compose.theme.AppTheme
+import dagger.hilt.android.AndroidEntryPoint
 
 private const val TAG = "[MainActivity]"
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private val hasNetwork = MutableLiveData(true)
@@ -183,7 +185,7 @@ fun BikeComposeApp(viewModel: MainViewModel, hasNetwork: LiveData<Boolean>, onRe
                 modifier = Modifier.padding(paddingValues)
             ) {
                 composable("Map") { MapScreen(viewModel) }
-                composable("Favorite") { FavoriteScreen() }
+                composable("Favorite") { FavoriteScreen(viewModel) }
                 composable("Settings") { SettingsScreen() }
             }
 

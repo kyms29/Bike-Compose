@@ -1,7 +1,7 @@
 package com.ymsu.bike_compose.data
 
-data class FullyStationInfo(
+data class CompleteStationInfo(
     val stationInfoItem: StationInfoItem,
-    val availableInfoItem: AvailableInfoItem,
+    var availableInfoItem: AvailableInfoItem,
     var isFavorite:Boolean = false
 )

@@ -8,7 +8,6 @@ import android.location.Location
 import android.location.LocationManager
 import android.net.Uri
 import android.util.Log
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,7 +27,6 @@ import androidx.compose.material.Surface
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsBike
 import androidx.compose.material.icons.filled.ElectricBolt
-import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocalParking
 import androidx.compose.material.icons.filled.MyLocation
@@ -57,15 +55,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.CameraPositionState
 import com.google.maps.android.compose.Circle
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
@@ -73,13 +72,16 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.ymsu.bike_compose.data.ApiResult
 import com.ymsu.bike_compose.data.AvailableInfoItem
-import com.ymsu.bike_compose.data.FullyStationInfo
+import com.ymsu.bike_compose.data.CompleteStationInfo
 import com.ymsu.bike_compose.data.StationAddress
 import com.ymsu.bike_compose.data.StationInfoItem
 import com.ymsu.bike_compose.data.StationName
 import com.ymsu.bike_compose.theme.AppTheme
 import com.ymsu.bike_compose.theme.orange
+import java.text.SimpleDateFormat
+import java.util.Calendar
 
 private const val TAG = "[MapScreen]"
 
@@ -90,33 +92,19 @@ fun MapScreen(viewModel: MainViewModel) {
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        var currentLocation by remember { mutableStateOf(LatLng(1.3521, 103.8198)) }
+        val currentLatLng by viewModel.currentLatLng.collectAsState()
 
         val cameraPositionState = rememberCameraPositionState {
-            position = CameraPosition.fromLatLngZoom(currentLocation, 12f)
+            position = CameraPosition.fromLatLngZoom(currentLatLng, 12f)
         }
 
         val context = LocalContext.current
 
-        val locationHandler = remember { LocationHandler(context) }
-        LaunchedEffect(Unit) {
-            locationHandler.getCurrentLocation { location ->
-                if (location != null) {
-                    Log.d(
-                        TAG,
-                        "get current location: ${location?.latitude} , ${location?.longitude}"
-                    )
-                    currentLocation = LatLng(location.latitude, location.longitude)
-                    cameraPositionState.move(
-                        CameraUpdateFactory.newLatLngZoom(
-                            currentLocation,
-                            16f
-                        )
-                    )
-                    viewModel.fetchNearByStationInfo(currentLocation.latitude, currentLocation.longitude)
-                    viewModel.fetchNearByAvailableInfo(currentLocation.latitude, currentLocation.longitude)
-                }
-            }
+        LaunchedEffect(currentLatLng) {
+            cameraPositionState.animate(
+                // use animate seems can avoid map not ready issue...?
+                CameraUpdateFactory.newLatLngZoom(currentLatLng, 16f)
+            )
         }
 
         LaunchedEffect(cameraPositionState.isMoving) {
@@ -127,15 +115,21 @@ fun MapScreen(viewModel: MainViewModel) {
                     "cameraPositionState change to: ${position.latitude}, ${position.longitude}"
                 )
                 viewModel.fetchNearByStationInfo(position.latitude, position.longitude)
-                viewModel.fetchNearByAvailableInfo(position.latitude, position.longitude)
             }
         }
-
-        val combinedInfo by viewModel.nearByCombinedInfo.collectAsState(emptyList())
         var showStationInfo by remember { mutableStateOf(false) }
-        var selectedFullyStationInfo by remember { mutableStateOf(FullyStationInfo(StationInfoItem(), AvailableInfoItem())) }
+        var selectedCompleteStationInfo by remember {
+            mutableStateOf(
+                CompleteStationInfo(
+                    StationInfoItem(),
+                    AvailableInfoItem()
+                )
+            )
+        }
         var selectedMarker by remember { mutableStateOf<LatLng?>(null) }
-        val markerSizes = remember { mutableStateMapOf<LatLng,Float>() }
+        val markerSizes = remember { mutableStateMapOf<LatLng, Float>() }
+
+        val completeStationInfos by viewModel.completeStationInfo.collectAsStateWithLifecycle()
 
         Box(modifier = Modifier.fillMaxSize()) {
             GoogleMap(
@@ -148,18 +142,25 @@ fun MapScreen(viewModel: MainViewModel) {
                 properties = MapProperties(isMyLocationEnabled = true)
             ) {
                 Circle(
-                    center = LatLng(cameraPositionState.position.target.latitude, cameraPositionState.position.target.longitude),
+                    center = LatLng(
+                        cameraPositionState.position.target.latitude,
+                        cameraPositionState.position.target.longitude
+                    ),
                     fillColor = Color.LightGray.copy(alpha = 0.5f),
                     strokeColor = Color.LightGray.copy(alpha = 0.5f),
                     radius = 1000.0
                 )
-                Log.d(TAG,"Trigger recompose combined info")
-                combinedInfo.forEach { (stationInfo, availableInfo,isFavorite) ->
-                    val icon = getRateIcon(availableInfo.AvailableRentBikes, availableInfo.AvailableReturnBikes)
+
+                completeStationInfos.forEach { (stationInfo, availableInfo, isFavorite) ->
+                    val icon = getRateIcon(
+                        availableInfo.AvailableRentBikes,
+                        availableInfo.AvailableReturnBikes
+                    )
                     val markerPosition = LatLng(
                         stationInfo.StationPosition.PositionLat,
-                        stationInfo.StationPosition.PositionLon)
-                    val markerSize = markerSizes[markerPosition]?:1f
+                        stationInfo.StationPosition.PositionLon
+                    )
+                    val markerSize = markerSizes[markerPosition] ?: 1f
                     Marker(
                         state = MarkerState(
                             position = markerPosition
@@ -169,7 +170,8 @@ fun MapScreen(viewModel: MainViewModel) {
                             selectedMarker = markerPosition
                             markerSizes[markerPosition] = 1.3f
                             showStationInfo = true
-                            selectedFullyStationInfo = FullyStationInfo(stationInfo, availableInfo,isFavorite)
+                            selectedCompleteStationInfo =
+                                CompleteStationInfo(stationInfo, availableInfo, isFavorite)
                             true
                         },
                         icon = vectorToBitmapDescriptor(
@@ -182,41 +184,44 @@ fun MapScreen(viewModel: MainViewModel) {
             }
 
             if (showStationInfo) {
-                Log.d(TAG,"showStationInfo")
+                Log.d(TAG, "showStationInfo")
                 val currentLocation = Location(LocationManager.NETWORK_PROVIDER).apply {
-                    latitude = currentLocation.latitude
-                    longitude = currentLocation.longitude
+                    latitude = currentLatLng.latitude
+                    longitude = currentLatLng.longitude
                 }
-                BottomSheetDialog(currentLocation,viewModel,selectedFullyStationInfo,
+                BottomSheetDialog(currentLocation, selectedCompleteStationInfo,
                     onDismiss = {
                         showStationInfo = false
                         selectedMarker?.let { markerSizes[it] = 1f }
                         selectedMarker = null
                     },
                     onFavoriteClick = {
-                        viewModel.clickFavorite(selectedFullyStationInfo.stationInfoItem.StationUID)
+                        viewModel.clickFavorite(selectedCompleteStationInfo.stationInfoItem.StationUID)
                     },
                     onShareClick = {
                         val sendIntent: Intent = Intent().apply {
                             val mapUri =
-                                "https://www.google.com/maps/dir/?api=1&destination=" + selectedFullyStationInfo.stationInfoItem.StationPosition.PositionLat + ","
-                            + selectedFullyStationInfo.stationInfoItem.StationPosition.PositionLon
+                                "https://www.google.com/maps/dir/?api=1&destination=" + selectedCompleteStationInfo.stationInfoItem.StationPosition.PositionLat + ","
+                            +selectedCompleteStationInfo.stationInfoItem.StationPosition.PositionLon
                             action = Intent.ACTION_SEND
                             putExtra(
                                 Intent.EXTRA_TEXT,
-                                selectedFullyStationInfo.stationInfoItem.StationName.Zh_tw + "有" + selectedFullyStationInfo.availableInfoItem.AvailableRentBikes.toString() + "可借" +
-                                        selectedFullyStationInfo.availableInfoItem.AvailableReturnBikes.toString() + "可還"
+                                selectedCompleteStationInfo.stationInfoItem.StationName.Zh_tw + "有" + selectedCompleteStationInfo.availableInfoItem.AvailableRentBikes.toString() + "可借" +
+                                        selectedCompleteStationInfo.availableInfoItem.AvailableReturnBikes.toString() + "可還"
                                         + "，地點在$mapUri"
                             )
                             type = "text/plain"
                         }
-                        sendIntent.putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.share_subject))
+                        sendIntent.putExtra(
+                            Intent.EXTRA_SUBJECT,
+                            context.getString(R.string.share_subject)
+                        )
                         val shareIntent = Intent.createChooser(sendIntent, null)
                         context.startActivity(shareIntent)
                     },
                     onNavigateClick = {
                         val gmmIntentUri =
-                            Uri.parse("google.navigation:q=" + selectedFullyStationInfo.stationInfoItem.StationPosition.PositionLat + "," + selectedFullyStationInfo.stationInfoItem.StationPosition.PositionLon + "&mode=w")
+                            Uri.parse("google.navigation:q=" + selectedCompleteStationInfo.stationInfoItem.StationPosition.PositionLat + "," + selectedCompleteStationInfo.stationInfoItem.StationPosition.PositionLon + "&mode=w")
                         val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
                         mapIntent.setPackage("com.google.android.apps.maps")
                         context.startActivity(mapIntent)
@@ -225,12 +230,20 @@ fun MapScreen(viewModel: MainViewModel) {
             }
 
             FloatingActionButton(
-                onClick = { cameraPositionState.move(CameraUpdateFactory.newLatLngZoom(currentLocation,16f))},
+                onClick = {
+                    cameraPositionState.move(
+                        CameraUpdateFactory.newLatLngZoom(
+                            currentLatLng,
+                            16f
+                        )
+                    )
+                },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(16.dp),
                 shape = CircleShape,
-                containerColor = Color.White){
+                containerColor = Color.White
+            ) {
                 Icon(imageVector = Icons.Default.MyLocation, contentDescription = "mylocation")
             }
         }
@@ -239,9 +252,8 @@ fun MapScreen(viewModel: MainViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BottomSheetDialog(currentLocation: Location,
-    viewModel: MainViewModel, fullyStationInfo: FullyStationInfo,
-    onDismiss: () -> Unit, onFavoriteClick: () -> Unit, onShareClick: () -> Unit, onNavigateClick: () -> Unit
+private fun BottomSheetDialog(currentLocation: Location, completeStationInfo: CompleteStationInfo,
+                              onDismiss: () -> Unit, onFavoriteClick: () -> Unit, onShareClick: () -> Unit, onNavigateClick: () -> Unit
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -251,13 +263,13 @@ private fun BottomSheetDialog(currentLocation: Location,
         shape = RectangleShape,
         contentWindowInsets = { WindowInsets(0.dp) }
     ) {
-        DialogContent(fullyStationInfo,currentLocation)
-        BottomRowContent(fullyStationInfo,onFavoriteClick,onShareClick,onNavigateClick)
+        DialogContent(completeStationInfo,currentLocation)
+        BottomRowContent(completeStationInfo,onFavoriteClick,onShareClick,onNavigateClick)
     }
 }
 
 @Composable
-private fun DialogContent(fullyStationInfo: FullyStationInfo,currentLocation: Location) {
+private fun DialogContent(completeStationInfo: CompleteStationInfo, currentLocation: Location) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -274,7 +286,7 @@ private fun DialogContent(fullyStationInfo: FullyStationInfo,currentLocation: Lo
                             .padding(top = 20.dp, bottom = 20.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
-                        text = fullyStationInfo.availableInfoItem.AvailableRentBikesDetail.GeneralBikes.toString()+"可借"
+                        text = completeStationInfo.availableInfoItem.AvailableRentBikesDetail.GeneralBikes.toString()+"可借"
                     )
                 }
                 Icon(imageVector = Icons.Default.DirectionsBike, contentDescription = "Bike",
@@ -295,7 +307,7 @@ private fun DialogContent(fullyStationInfo: FullyStationInfo,currentLocation: Lo
                             .padding(top = 20.dp, bottom = 20.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
-                        text = fullyStationInfo.availableInfoItem.AvailableRentBikesDetail.ElectricBikes.toString()+"可借"
+                        text = completeStationInfo.availableInfoItem.AvailableRentBikesDetail.ElectricBikes.toString()+"可借"
                     )
                 }
                 Icon(imageVector = Icons.Default.ElectricBolt, contentDescription = "Bike",
@@ -316,7 +328,7 @@ private fun DialogContent(fullyStationInfo: FullyStationInfo,currentLocation: Lo
                             .padding(top = 20.dp, bottom = 20.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
-                        text = fullyStationInfo.availableInfoItem.AvailableReturnBikes.toString()+"可還"
+                        text = completeStationInfo.availableInfoItem.AvailableReturnBikes.toString()+"可還"
                     )
                 }
                 Icon(imageVector = Icons.Default.LocalParking, contentDescription = "Bike",
@@ -328,18 +340,29 @@ private fun DialogContent(fullyStationInfo: FullyStationInfo,currentLocation: Lo
             }
         }
 
-        Row(modifier = Modifier.fillMaxWidth().padding(end = 10.dp)) {
+        Row(modifier = Modifier
+            .fillMaxWidth()
+            .padding(end = 10.dp)) {
+
+            var currentTimeDate = Calendar.getInstance().time
+            var diff =
+                (currentTimeDate.time - convertTime(completeStationInfo.stationInfoItem.UpdateTime).time.time) / 1000
+
             Text(
-                modifier = Modifier.padding(top = 20.dp).weight(1f),
-                text = "N秒前更新", color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier
+                    .padding(top = 20.dp)
+                    .weight(1f),
+                text = diff.toInt().toString() + "秒前更新", color = MaterialTheme.colorScheme.surfaceVariant,
                 fontSize = 12.sp
             )
 
             val distance = getStationDistance(current = currentLocation,
-                stationLatLng = LatLng(fullyStationInfo.stationInfoItem.StationPosition.PositionLat, fullyStationInfo.stationInfoItem.StationPosition.PositionLon)
+                stationLatLng = LatLng(completeStationInfo.stationInfoItem.StationPosition.PositionLat, completeStationInfo.stationInfoItem.StationPosition.PositionLon)
             )
             Text(
-                modifier = Modifier.padding(top = 20.dp).weight(1f),
+                modifier = Modifier
+                    .padding(top = 20.dp)
+                    .weight(1f),
                 text = "距離$distance", color = MaterialTheme.colorScheme.surfaceVariant,
                 fontSize = 12.sp,
                 textAlign = TextAlign.End
@@ -349,23 +372,22 @@ private fun DialogContent(fullyStationInfo: FullyStationInfo,currentLocation: Lo
         Text(
             modifier = Modifier.padding(top = 20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
-            text = fullyStationInfo.stationInfoItem.StationName.Zh_tw
+            text = completeStationInfo.stationInfoItem.StationName.Zh_tw
         )
         Text(
             modifier = Modifier.padding(top = 20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
-            text = fullyStationInfo.stationInfoItem.StationAddress.Zh_tw
+            text = completeStationInfo.stationInfoItem.StationAddress.Zh_tw
         )
     }
-
 }
 
 @Composable
-private fun BottomRowContent(fullyStationInfo: FullyStationInfo, onFavoriteClick: () -> Unit, onShareClick: () -> Unit, onNavigateClick: () -> Unit) {
+private fun BottomRowContent(completeStationInfo: CompleteStationInfo, onFavoriteClick: () -> Unit, onShareClick: () -> Unit, onNavigateClick: () -> Unit) {
     var isFavorite by remember {
-        mutableStateOf(fullyStationInfo.isFavorite)
+        mutableStateOf(completeStationInfo.isFavorite)
     }
-    Log.d(TAG,"[BottomRowContent] Create or recompose , isFavorite = ${fullyStationInfo.isFavorite}")
+    Log.d(TAG,"[BottomRowContent] Create or recompose , isFavorite = ${completeStationInfo.isFavorite}")
 
     Row(
         modifier = Modifier
@@ -374,7 +396,8 @@ private fun BottomRowContent(fullyStationInfo: FullyStationInfo, onFavoriteClick
     ) {
         Button(
             onClick = { onFavoriteClick()
-                isFavorite = !isFavorite},
+                isFavorite = !isFavorite
+                      },
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
@@ -469,6 +492,13 @@ private fun getStationDistance(stationLatLng: LatLng, current: Location): String
     }
 }
 
+private val convertTime: (time: String) -> Calendar = { time ->
+    val simpleDateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss+08:00")
+    val calendar = Calendar.getInstance().apply {
+        setTime(simpleDateFormat.parse(time))
+    }
+    calendar
+}
 
 
 @Preview(showBackground = true)
@@ -481,7 +511,7 @@ fun PreviewBottomSheetDialog() {
     AppTheme {
         Surface(color = MaterialTheme.colorScheme.onPrimaryContainer) {
             DialogContent(currentLocation = currentLocation,
-                fullyStationInfo = FullyStationInfo(
+                completeStationInfo = CompleteStationInfo(
                     StationInfoItem(StationAddress = StationAddress(Zh_tw = "測試地址用"), StationName = StationName(Zh_tw = "測試站名用")),
                     AvailableInfoItem()
                 )
@@ -494,7 +524,7 @@ fun PreviewBottomSheetDialog() {
 @Composable
 fun PreviewBottomRowContent() {
     AppTheme {
-        BottomRowContent(fullyStationInfo = FullyStationInfo(StationInfoItem(),AvailableInfoItem()), onFavoriteClick = {}, onShareClick = {}, onNavigateClick = {})
+        BottomRowContent(completeStationInfo = CompleteStationInfo(StationInfoItem(),AvailableInfoItem()), onFavoriteClick = {}, onShareClick = {}, onNavigateClick = {})
     }
 }
 

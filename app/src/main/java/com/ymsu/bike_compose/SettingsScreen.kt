@@ -16,6 +16,10 @@ fun SettingsScreen() {
             .fillMaxSize()
             .padding(16.dp)
     )
+    // use list + 從資料庫拿出我收藏的車站清單，再呼叫tdx api去拿到全台灣站點資料
+    // 1. viewmodel要可以呼叫全台站點
+    // 2. 用progress bar來處理載入資料的時候的畫面
+    // 3. 點擊站點可以切換到地圖頁面
 }
 
 @Preview(showBackground = true)
