@@ -26,6 +26,7 @@ import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -185,7 +186,7 @@ fun BikeComposeApp(viewModel: MainViewModel, hasNetwork: LiveData<Boolean>, onRe
                 modifier = Modifier.padding(paddingValues)
             ) {
                 composable("Map") { MapScreen(viewModel) }
-                composable("Favorite") { FavoriteScreen(viewModel) }
+                composable("Home") { HomeScreen(viewModel) }
                 composable("Settings") { SettingsScreen() }
             }
 
@@ -222,7 +223,7 @@ fun BikeComposeApp(viewModel: MainViewModel, hasNetwork: LiveData<Boolean>, onRe
 
 @Composable
 fun BottomNavigationBar(navController: NavController) {
-    val items = listOf("Favorite", "Map", "Settings")
+    val items = listOf("Home", "Map", "Settings")
     val currentBackStackEntry = navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry.value?.destination?.route
 
@@ -244,7 +245,7 @@ fun BottomNavigationBar(navController: NavController) {
                 icon = {
                     Icon(
                         imageVector = when (item) {
-                            "Favorite" -> Icons.Default.Favorite
+                            "Home" -> Icons.Default.Home
                             "Map" -> Icons.Default.LocationOn
                             "Settings" -> Icons.Default.Settings
                             else -> Icons.Default.Settings

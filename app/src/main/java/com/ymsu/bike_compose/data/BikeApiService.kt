@@ -7,13 +7,15 @@ import okhttp3.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface BikeApiService {
-    @GET("api/basic/Bike/Station/All/")
-    suspend fun getStationInfo(): List<StationInfoItem>
-    @GET("api/basic/Bike/Availability/City/NewTaipei")
-    suspend fun getAvailableInfo() : List<AvailableInfoItem>
+    @GET("api/basic/v2/Bike/Station/City/{City}")
+    suspend fun getStationInfo(@Path("City") city: String): List<StationInfoItem>
+
+    @GET("api/basic/v2/Bike/Availability/City/{City}")
+    suspend fun getAvailableInfo(@Path("City") city: String) : List<AvailableInfoItem>
 
     @GET("api/advanced/v2/Bike/Station/NearBy")
     suspend fun getStationInfoNearBy(@Query("\$spatialFilter") nearBy: String): List<StationInfoItem>

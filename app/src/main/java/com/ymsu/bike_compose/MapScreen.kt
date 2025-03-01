@@ -64,7 +64,6 @@ import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.CameraPositionState
 import com.google.maps.android.compose.Circle
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
@@ -72,7 +71,6 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
-import com.ymsu.bike_compose.data.ApiResult
 import com.ymsu.bike_compose.data.AvailableInfoItem
 import com.ymsu.bike_compose.data.CompleteStationInfo
 import com.ymsu.bike_compose.data.StationAddress
@@ -356,14 +354,17 @@ private fun DialogContent(completeStationInfo: CompleteStationInfo, currentLocat
                 fontSize = 12.sp
             )
 
-            val distance = getStationDistance(current = currentLocation,
-                stationLatLng = LatLng(completeStationInfo.stationInfoItem.StationPosition.PositionLat, completeStationInfo.stationInfoItem.StationPosition.PositionLon)
-            )
+            val distanceString = if (completeStationInfo.distance > 1000) {
+                "%.2f".format(completeStationInfo.distance / 1000).toString() + "公里"
+            } else {
+                completeStationInfo.distance.toInt().toString() + "公尺"
+            }
+
             Text(
                 modifier = Modifier
                     .padding(top = 20.dp)
                     .weight(1f),
-                text = "距離$distance", color = MaterialTheme.colorScheme.surfaceVariant,
+                text = "距離$distanceString", color = MaterialTheme.colorScheme.surfaceVariant,
                 fontSize = 12.sp,
                 textAlign = TextAlign.End
             )

@@ -2,6 +2,8 @@ package com.ymsu.bike_compose.theme
 import androidx.compose.ui.graphics.Color
 
 val orange = Color(0XFFFFBB77)
+val gray_300 = Color(0xFFE0E0E0)
+val gray_100 = Color(0xFFF5F5F5)
 
 val primaryLight = Color(0xFF655978)
 val onPrimaryLight = Color(0xFFFFFFFF)

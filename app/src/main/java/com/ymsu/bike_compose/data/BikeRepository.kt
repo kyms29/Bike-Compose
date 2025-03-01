@@ -14,8 +14,8 @@ import javax.inject.Inject
 
 class BikeRepository(private val apiService: BikeApiService) {
     // 用state flow? or flow?
-    fun getStationInfo(): Flow<ApiResult<List<StationInfoItem>>> = safeApiCall {  apiService.getStationInfo() }
-    fun getAvailableInfo(): Flow<ApiResult<List<AvailableInfoItem>>> = safeApiCall { apiService.getAvailableInfo() }
+    suspend fun getStationInfo(city: String): List<StationInfoItem> =  apiService.getStationInfo(city)
+    suspend fun getAvailableInfo(city: String):List<AvailableInfoItem> = apiService.getAvailableInfo(city)
     suspend fun getNearByStationInfo(nearBy: String): List<StationInfoItem> =  apiService.getStationInfoNearBy(nearBy)
     suspend fun getNearByAvailableInfo(nearBy: String): List<AvailableInfoItem> =  apiService.getAvailabilityInfoNearBy(nearBy)
 
