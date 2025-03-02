@@ -16,11 +16,17 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -56,6 +62,15 @@ class MainViewModel @Inject constructor(private val favoriteRepository: Favorite
     val allFavoriteStations = _allFavoriteStations.asStateFlow()
     private var allStationsJob: Job? = null
     private var allAvailableJob: Job? = null
+
+    private val _queryStations = MutableStateFlow("")
+    val filterStations = _queryStations
+        .flatMapLatest { query ->
+            _allStations.map { stations->
+                if (query.isEmpty()) emptyList()
+                else _allStations.value.filter { it.StationName.Zh_tw.contains(query,ignoreCase = true) }
+            }
+        }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     init {
         locationRepository.startRequestLocation()
@@ -185,4 +200,7 @@ class MainViewModel @Inject constructor(private val favoriteRepository: Favorite
         return stationLocation.distanceTo(current)
     }
 
+    fun queryStations(queryStation: String){
+        _queryStations.value = queryStation
+    }
 }

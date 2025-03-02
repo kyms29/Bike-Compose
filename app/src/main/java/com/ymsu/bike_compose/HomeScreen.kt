@@ -1,11 +1,14 @@
 package com.ymsu.bike_compose
 
 
+import android.util.Log
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,8 +20,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -36,6 +40,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.accompanist.placeholder.PlaceholderHighlight
 import com.google.accompanist.placeholder.placeholder
@@ -70,119 +76,141 @@ import kotlin.math.abs
 fun HomeScreen(viewModel: MainViewModel) {
     val allFavoriteStations by viewModel.allFavoriteStations.collectAsStateWithLifecycle()
     val nearByStations by viewModel.completeStationInfo.collectAsStateWithLifecycle()
-    Screen(allFavoriteStations,nearByStations)
+    ColumnScreen(allFavoriteStations, nearByStations,viewModel)
 }
 
 @Composable
-private fun Screen(allFavoriteStations: List<CompleteStationInfo>, nearByStations: List<CompleteStationInfo>) {
-    Scaffold(
-        topBar = {
-            TopBarWithSearch()
-        }
-    ) { padding ->
+private fun ColumnScreen(
+    allFavoriteStations: List<CompleteStationInfo>,
+    nearByStations: List<CompleteStationInfo>,
+    viewModel: MainViewModel
+) {
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.LightGray.copy(alpha = 0.3f))
+    ) {
         Column(
+            verticalArrangement = Arrangement.spacedBy((-1).dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(padding)
+                .height(150.dp)
+                .background(MaterialTheme.colorScheme.primary.copy(0.9f))
         ) {
-            Box(
+            Text(
+                text = "尋找YouBike站點",
+                color = Color.DarkGray,
+                fontSize = 24.sp,
                 modifier = Modifier
-                    .height(16.dp)
-                    .fillMaxWidth()
-                    .background(Color.LightGray.copy(alpha = 0.3f))
+                    .padding(20.dp)
+                    .offset(y = 20.dp)
             )
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.LightGray.copy(alpha = 0.3f))
-            ) {
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                ) {
-                    Spacer(
-                        modifier = Modifier.height(16.dp)
-                    )
-
-                    Text(
-                        modifier = Modifier.padding(start = 20.dp),
-                        text = "附近的站點",
-                        color = Color.DarkGray,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-
-                    BikeStationList(stations = nearByStations)
-                }
-
-                Column(modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)) {
-                    Spacer(
-                        modifier = Modifier.height(16.dp)
-                    )
-
-                    Text(
-                        text = "收藏站點",
-                        color = Color.DarkGray,
-                        modifier = Modifier.padding(start = 20.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-
-                    FavoriteStationList(stations = allFavoriteStations)
-                }
-            }
         }
-    }
-}
 
-@Composable
-private fun TopBarWithSearch() {
-    Column(
-        verticalArrangement = Arrangement.spacedBy((-1).dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(150.dp)
-            .background(MaterialTheme.colorScheme.primary.copy(0.9f))
-    ) {
-        Text(
-            text = "尋找YouBike站點", color = Color.DarkGray, fontSize = 24.sp, modifier = Modifier
-                .padding(20.dp)
-                .offset(y = 20.dp)
+        Spacer(
+            modifier = Modifier.height(26.dp)
         )
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
-        ) {
-            SearchBar(modifier = Modifier.offset(y = 40.dp))
-        }
+
+        Text(
+            modifier = Modifier.padding(start = 20.dp),
+            text = "附近的站點",
+            color = Color.DarkGray,
+            style = MaterialTheme.typography.titleMedium,
+        )
+
+        BikeStationList(stations = nearByStations)
+
+        Spacer(
+            modifier = Modifier.height(16.dp)
+        )
+
+        Text(
+            text = "收藏站點",
+            color = Color.DarkGray,
+            modifier = Modifier.padding(start = 20.dp),
+            style = MaterialTheme.typography.titleMedium,
+        )
+
+        FavoriteStationList(stations = allFavoriteStations)
+    }
+
+    Box(modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center) {
+        SearchBar(modifier = Modifier
+            .offset(y = 110.dp), viewModel = viewModel
+        )
     }
 }
 
 @Composable
 fun SearchBar(
-    modifier: Modifier = Modifier
+    modifier: Modifier,
+    viewModel: MainViewModel
 ) {
-    TextField(
-        value = "",
-        onValueChange = {},
-        trailingIcon = {
-            Icon(imageVector = Icons.Default.Search, contentDescription = "")
-        },
-        colors = TextFieldDefaults.colors(
-            unfocusedIndicatorColor = Color.Transparent,
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-            focusedContainerColor = MaterialTheme.colorScheme.surface
-        ),
-        placeholder = {
-            androidx.compose.material3.Text(text = "Search...")
-        },
-        modifier = modifier
-            .heightIn(min = 56.dp),
-        shape = RoundedCornerShape(20.dp)
-    )
+    var isExpanded by remember {
+        mutableStateOf(false)
+    }
+    var searchString by remember {
+        mutableStateOf("")
+    }
+
+    val filterStations by viewModel.filterStations.collectAsState()
+
+    Box {
+        TextField(
+            value = searchString,
+            onValueChange = {
+                searchString = it
+                viewModel.queryStations(it) },
+            colors = TextFieldDefaults.colors(
+                unfocusedIndicatorColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                focusedContainerColor = MaterialTheme.colorScheme.surface
+            ),
+            placeholder = {
+                androidx.compose.material3.Text(text = "搜尋站名...")
+            },
+            modifier = modifier
+                .width(300.dp)
+                .heightIn(min = 56.dp),
+            shape = if (isExpanded) RoundedCornerShape(20.dp,20.dp)
+            else RoundedCornerShape(20.dp),
+            interactionSource =
+            remember { MutableInteractionSource() }
+                .also { interactionSource ->
+                    LaunchedEffect(interactionSource) {
+                        interactionSource.interactions.collect {
+                            if (it is PressInteraction.Release) {
+                                // works like onClick
+                                isExpanded = !isExpanded
+                            }
+                        }
+                    }
+                }
+        )
+
+        val height by animateDpAsState(
+            targetValue = if (isExpanded) 150.dp else 0.dp,
+            animationSpec = tween(durationMillis = 500)
+        )
+
+        if (isExpanded) {
+            LazyColumn( modifier = Modifier
+                .offset(y = 160.dp)
+                .width(300.dp)
+                .height(height)
+                .background(MaterialTheme.colorScheme.surface)
+                .zIndex(0f)) {
+
+                items(filterStations.size) { index ->
+                    // TODO: 這邊要設計成card + 利用viewmodel的all city list 列出相關的站名
+                    Text(text = filterStations[index].StationName.Zh_tw, fontSize = 20.sp)
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -202,9 +230,15 @@ fun FavoriteStationList(stations: List<CompleteStationInfo>) {
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
 
-        itemsIndexed(if (isLoading) List(1){ CompleteStationInfo(StationInfoItem(), AvailableInfoItem())} else stations) { index, station ->
+        itemsIndexed(if (isLoading) List(1) {
+            CompleteStationInfo(
+                StationInfoItem(),
+                AvailableInfoItem()
+            )
+        } else stations) { index, station ->
             val layoutInfo = lazyListState.layoutInfo
-            val viewportCenter = (layoutInfo.viewportEndOffset + layoutInfo.viewportStartOffset) / 2f
+            val viewportCenter =
+                (layoutInfo.viewportEndOffset + layoutInfo.viewportStartOffset) / 2f
             val itemInfo = layoutInfo.visibleItemsInfo.find { it.index == index }
             val scale = remember { mutableStateOf(1f) }
 
@@ -229,7 +263,7 @@ fun FavoriteStationList(stations: List<CompleteStationInfo>) {
                             scaleY = animatedScale
                         }
                 ) {
-                    Column(modifier = Modifier.fillMaxWidth()){
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         Image(
                             painter = painterResource(id = R.drawable.pic),
                             contentDescription = "",
@@ -253,7 +287,9 @@ fun FavoriteStationList(stations: List<CompleteStationInfo>) {
                                     color = gray_300,
                                     highlight = PlaceholderHighlight.shimmer(highlightColor = gray_100)
                                 ),
-                            text = if (isLoading) "Loading..." else station.stationInfoItem.StationName.Zh_tw.substringAfter("_"),
+                            text = if (isLoading) "Loading..." else station.stationInfoItem.StationName.Zh_tw.substringAfter(
+                                "_"
+                            ),
                             color = Color.DarkGray,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -339,9 +375,15 @@ fun BikeStationList(stations: List<CompleteStationInfo>) {
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
 
-        itemsIndexed(if (isLoading) List(10){ CompleteStationInfo(StationInfoItem(), AvailableInfoItem())} else stations) { index, station ->
+        itemsIndexed(if (isLoading) List(10) {
+            CompleteStationInfo(
+                StationInfoItem(),
+                AvailableInfoItem()
+            )
+        } else stations) { index, station ->
             val layoutInfo = lazyListState.layoutInfo
-            val viewportCenter = (layoutInfo.viewportEndOffset + layoutInfo.viewportStartOffset) / 2f
+            val viewportCenter =
+                (layoutInfo.viewportEndOffset + layoutInfo.viewportStartOffset) / 2f
             val itemInfo = layoutInfo.visibleItemsInfo.find { it.index == index }
             val scale = remember { mutableStateOf(1f) }
 
@@ -366,7 +408,7 @@ fun BikeStationList(stations: List<CompleteStationInfo>) {
                         scaleY = animatedScale
                     }
             ) {
-                Column(modifier = Modifier.fillMaxWidth()){
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Image(
                         painter = painterResource(id = R.drawable.pic),
                         contentDescription = "",
@@ -390,7 +432,9 @@ fun BikeStationList(stations: List<CompleteStationInfo>) {
                                 color = gray_300,
                                 highlight = PlaceholderHighlight.shimmer(highlightColor = gray_100)
                             ),
-                        text = if (isLoading) "Loading..." else station.stationInfoItem.StationName.Zh_tw.substringAfter("_"),
+                        text = if (isLoading) "Loading..." else station.stationInfoItem.StationName.Zh_tw.substringAfter(
+                            "_"
+                        ),
                         color = Color.DarkGray,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -477,10 +521,6 @@ fun previewFavorite() {
         )
     )
     AppTheme {
-        Screen(allFavoriteStations = list, nearByStations = list)
-//        Column() {
-//            topBarWithSearch()
-//            BikeStationList(list)
-//        }
+//        ColumnScreen(allFavoriteStations = list, nearByStations = list)
     }
 }
