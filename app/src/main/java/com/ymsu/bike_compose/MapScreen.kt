@@ -373,7 +373,7 @@ private fun DialogContent(completeStationInfo: CompleteStationInfo, currentLocat
         Text(
             modifier = Modifier.padding(top = 20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
-            text = completeStationInfo.stationInfoItem.StationName.Zh_tw
+            text = completeStationInfo.stationInfoItem.StationName.Zh_tw.substringAfter("_")
         )
         Text(
             modifier = Modifier.padding(top = 20.dp),

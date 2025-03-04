@@ -63,12 +63,19 @@ class MainViewModel @Inject constructor(private val favoriteRepository: Favorite
     private var allStationsJob: Job? = null
     private var allAvailableJob: Job? = null
 
+    private val _allCityStationsInfo = MutableStateFlow<List<CompleteStationInfo>>(emptyList())
+
     private val _queryStations = MutableStateFlow("")
     val filterStations = _queryStations
         .flatMapLatest { query ->
-            _allStations.map { stations->
-                if (query.isEmpty()) emptyList()
-                else _allStations.value.filter { it.StationName.Zh_tw.contains(query,ignoreCase = true) }
+            _allCityStationsInfo.map { stations->
+                if (query.isEmpty()) {
+                    emptyList()
+                }else {
+                    _allCityStationsInfo.value.filter {
+                        it.stationInfoItem.StationName.Zh_tw.contains(query,ignoreCase = true)
+                    }.sortedBy { it.distance }
+                }
             }
         }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
@@ -111,25 +118,50 @@ class MainViewModel @Inject constructor(private val favoriteRepository: Favorite
         fetchAllStations()
         fetchAllAvailability()
 
-        combine(
-            _allStations,
-            _allAvailable,
-            _favoriteStations
-        ) { allStations, allAvailable ,favorites->
-            Log.d(TAG,"combine all stations flow trigger")
+        // combine _allStations and _allAvailable first
+        combine(_allStations,_allAvailable) { allStations, allAvailable ->
             allStations.map { stationInfo ->
-                val isFavorite = stationInfo.StationUID in favorites
-                val available = allAvailable.find { it.StationUID == stationInfo.StationUID } ?: AvailableInfoItem()
+                val availableInfo = allAvailable.find { it.StationUID == stationInfo.StationUID } ?: AvailableInfoItem()
                 val currentLocation = Location(LocationManager.NETWORK_PROVIDER).apply {
                     latitude = _currentLatLng.value.latitude
                     longitude = _currentLatLng.value.longitude
                 }
-                val distance = getStationDistance(LatLng(stationInfo.StationPosition.PositionLat, stationInfo.StationPosition.PositionLon),currentLocation)
-                CompleteStationInfo(stationInfo, available, isFavorite,distance)
-            }.filter { it.isFavorite }.sortedBy { it.distance }
-        }
-            .onEach { _allFavoriteStations.value = it }
+                val distance = getStationDistance(
+                    LatLng(stationInfo.StationPosition.PositionLat,
+                    stationInfo.StationPosition.PositionLon),currentLocation
+                )
+                CompleteStationInfo(stationInfo,availableInfo,false,distance)
+            }
+        }.onEach { _allCityStationsInfo.value = it }
             .launchIn(viewModelScope)
+
+        _allCityStationsInfo.combine(_favoriteStations) { _allStationAndAvailable, favoriteList ->
+            _allStationAndAvailable.map { stationAndAvailable ->
+                val isFavorite = stationAndAvailable.stationInfoItem.StationUID in favoriteList
+                CompleteStationInfo(stationAndAvailable.stationInfoItem,stationAndAvailable.availableInfoItem,isFavorite,stationAndAvailable.distance)
+            }.filter { it.isFavorite }.sortedBy { it.distance }
+        }.onEach { _allFavoriteStations.value = it }  // 更新最终的结果
+            .launchIn(viewModelScope)  // 启动Flow
+
+//        combine(
+//            _allStations,
+//            _allAvailable,
+//            _favoriteStations
+//        ) { allStations, allAvailable ,favorites->
+//            Log.d(TAG,"combine all stations flow trigger")
+//            allStations.map { stationInfo ->
+//                val isFavorite = stationInfo.StationUID in favorites
+//                val available = allAvailable.find { it.StationUID == stationInfo.StationUID } ?: AvailableInfoItem()
+//                val currentLocation = Location(LocationManager.NETWORK_PROVIDER).apply {
+//                    latitude = _currentLatLng.value.latitude
+//                    longitude = _currentLatLng.value.longitude
+//                }
+//                val distance = getStationDistance(LatLng(stationInfo.StationPosition.PositionLat, stationInfo.StationPosition.PositionLon),currentLocation)
+//                CompleteStationInfo(stationInfo, available, isFavorite,distance)
+//            }.filter { it.isFavorite }.sortedBy { it.distance }
+//        }
+//            .onEach { _allFavoriteStations.value = it }
+//            .launchIn(viewModelScope)
     }
 
     fun fetchNearByStationInfo(latitude: Double, longitude: Double, distance: Int = 1000) {
