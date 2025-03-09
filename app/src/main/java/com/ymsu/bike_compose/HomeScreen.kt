@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
@@ -15,7 +16,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -37,13 +36,10 @@ import androidx.compose.material.icons.filled.DirectionsBike
 import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocalParking
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardColors
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -56,23 +52,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.focus.focusModifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.room.util.query
+import androidx.navigation.NavController
 import com.google.accompanist.placeholder.PlaceholderHighlight
 import com.google.accompanist.placeholder.placeholder
 import com.google.accompanist.placeholder.shimmer
@@ -84,30 +76,37 @@ import com.ymsu.bike_compose.data.StationName
 import com.ymsu.bike_compose.theme.AppTheme
 import com.ymsu.bike_compose.theme.gray_100
 import com.ymsu.bike_compose.theme.gray_300
-import dagger.hilt.android.EntryPointAccessors
 import kotlin.math.abs
 
 
 @Composable
-fun HomeScreen(viewModel: MainViewModel) {
+fun HomeScreen(viewModel: MainViewModel, navController:NavController) {
     val allFavoriteStations by viewModel.allFavoriteStations.collectAsStateWithLifecycle()
     val nearByStations by viewModel.completeStationInfo.collectAsStateWithLifecycle()
-    ColumnScreen(allFavoriteStations, nearByStations,viewModel)
+    ColumnScreen(allFavoriteStations, nearByStations,viewModel,navController)
 }
 
 @Composable
 private fun ColumnScreen(
     allFavoriteStations: List<CompleteStationInfo>,
     nearByStations: List<CompleteStationInfo>,
-    viewModel: MainViewModel
+    viewModel: MainViewModel,
+    navController: NavController
 ) {
+    val onClick:(CompleteStationInfo) -> Unit = { completeStationInfo ->
+        Log.d("","[onClick] station uid = "+completeStationInfo.stationInfoItem.StationUID)
+        // navigate to map screen
+        // call viewmodel function to set selected station
+        viewModel.setSelectedStation(completeStationInfo)
+        navController.navigate("Map")
+    }
 
-    HomeMainView(nearByStations, allFavoriteStations)
+    HomeMainView(nearByStations, allFavoriteStations, onClick)
 
     Box(modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center) {
         SearchBar(modifier = Modifier
-            .offset(y = 110.dp), viewModel = viewModel
+            .offset(y = 110.dp), viewModel = viewModel,navController
         )
     }
 }
@@ -115,7 +114,8 @@ private fun ColumnScreen(
 @Composable
 private fun HomeMainView(
     nearByStations: List<CompleteStationInfo>,
-    allFavoriteStations: List<CompleteStationInfo>
+    allFavoriteStations: List<CompleteStationInfo>,
+    onClick: (CompleteStationInfo) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -150,7 +150,7 @@ private fun HomeMainView(
             style = MaterialTheme.typography.titleMedium,
         )
 
-        BikeStationList(stations = nearByStations)
+        BikeStationList(stations = nearByStations,onClick)
 
         Spacer(
             modifier = Modifier.height(16.dp)
@@ -163,14 +163,15 @@ private fun HomeMainView(
             style = MaterialTheme.typography.titleMedium,
         )
 
-        FavoriteStationList(stations = allFavoriteStations)
+        FavoriteStationList(stations = allFavoriteStations,onClick)
     }
 }
 
 @Composable
 fun SearchBar(
     modifier: Modifier,
-    viewModel: MainViewModel
+    viewModel: MainViewModel,
+    navController: NavController
 ) {
 
 
@@ -181,14 +182,23 @@ fun SearchBar(
         viewModel.queryStations(query)
     }
 
-    SearchBarDetail(modifier, filterStations, onQueryChange)
+    val onClick:(CompleteStationInfo) -> Unit = { completeStationInfo ->
+        Log.d("","[onClick] station uid = "+completeStationInfo.stationInfoItem.StationUID)
+        // navigate to map screen
+        // call viewmodel function to set selected station
+        viewModel.setSelectedStation(completeStationInfo)
+        navController.navigate("Map")
+    }
+
+    SearchBarDetail(modifier, filterStations, onQueryChange,onClick)
 }
 
 @Composable
 private fun SearchBarDetail(
     modifier: Modifier,
     filterStations: List<CompleteStationInfo>,
-    onQueryChange: (String) -> Unit
+    onQueryChange: (String) -> Unit,
+    onClick: (CompleteStationInfo)->Unit
 ) {
     var isExpanded by remember {
         mutableStateOf(false)
@@ -196,6 +206,9 @@ private fun SearchBarDetail(
     var searchString by remember {
         mutableStateOf("")
     }
+
+    val keyboardController = LocalSoftwareKeyboardController.current
+
     Box {
         TextField(
             value = searchString,
@@ -214,7 +227,8 @@ private fun SearchBarDetail(
             },
             modifier = modifier
                 .width(350.dp)
-                .heightIn(min = 56.dp),
+                .heightIn(min = 56.dp)
+                .clickable { keyboardController?.hide() },
             shape = if (isExpanded) RoundedCornerShape(20.dp, 20.dp)
             else RoundedCornerShape(20.dp),
             interactionSource =
@@ -225,6 +239,9 @@ private fun SearchBarDetail(
                             if (it is PressInteraction.Release) {
                                 // works like onClick
                                 isExpanded = !isExpanded
+                                keyboardController?.apply {
+                                    if (isExpanded) show() else hide()
+                                }
                             }
                         }
                     }
@@ -256,7 +273,7 @@ private fun SearchBarDetail(
 
                     items(filterStations.size) { index ->
                         // TODO: 這邊要設計成card + 利用viewmodel的all city list 列出相關的站名
-                        SearchStationCard(filterStations, index)
+                        SearchStationCard(filterStations, index, onClick)
                     }
                 }
             }
@@ -267,11 +284,16 @@ private fun SearchBarDetail(
 @Composable
 private fun SearchStationCard(
     filterStations: List<CompleteStationInfo>,
-    index: Int
+    index: Int,
+    onClick: (CompleteStationInfo) -> Unit
 ) {
     Card(
         modifier = Modifier
-            .width(350.dp),
+            .width(350.dp)
+            .clickable {
+                // handle click here
+                onClick(filterStations[index])
+            },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
@@ -378,7 +400,7 @@ private fun SearchStationCard(
 }
 
 @Composable
-fun FavoriteStationList(stations: List<CompleteStationInfo>) {
+fun FavoriteStationList(stations: List<CompleteStationInfo>, onClick: (CompleteStationInfo) -> Unit) {
     val lazyListState = rememberLazyListState()
     var isLoading by remember { mutableStateOf(true) }
 
@@ -420,6 +442,9 @@ fun FavoriteStationList(stations: List<CompleteStationInfo>) {
                 Card(
                     elevation = CardDefaults.elevatedCardElevation(defaultElevation = 8.dp),
                     modifier = Modifier
+                        .clickable {
+                            onClick(stations[index])
+                        }
                         .size(width = 200.dp, height = 250.dp)
                         .padding(horizontal = 8.dp)
                         .graphicsLayer {
@@ -523,7 +548,7 @@ fun FavoriteStationList(stations: List<CompleteStationInfo>) {
 }
 
 @Composable
-fun BikeStationList(stations: List<CompleteStationInfo>) {
+fun BikeStationList(stations: List<CompleteStationInfo>, onClick: (CompleteStationInfo) -> Unit) {
     val lazyListState = rememberLazyListState()
     var isLoading by remember { mutableStateOf(true) }
 
@@ -539,8 +564,8 @@ fun BikeStationList(stations: List<CompleteStationInfo>) {
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
 
-        itemsIndexed(if (isLoading) List(10) {
-            CompleteStationInfo(
+        itemsIndexed(
+            if (isLoading) List(10) { CompleteStationInfo(
                 StationInfoItem(),
                 AvailableInfoItem()
             )
@@ -565,6 +590,9 @@ fun BikeStationList(stations: List<CompleteStationInfo>) {
             Card(
                 elevation = CardDefaults.elevatedCardElevation(defaultElevation = 8.dp),
                 modifier = Modifier
+                    .clickable {
+                        onClick(stations[index])
+                    }
                     .size(width = 200.dp, height = 250.dp)
                     .padding(horizontal = 8.dp)
                     .graphicsLayer {
@@ -678,7 +706,7 @@ fun PreviewSearchStationCard(){
     )
 
     AppTheme {
-        SearchStationCard(filterStations = list, index = 0)
+//        SearchStationCard(filterStations = list, index = 0)
     }
 }
 
@@ -713,7 +741,7 @@ fun PreviewSearchBarDetails(){
     AppTheme {
         SearchBarDetail(modifier = Modifier, filterStations = list.toList(), onQueryChange = {
                 query ->
-            })
+            }, onClick = {completeStationInfo ->  })
     }
 }
 
@@ -747,6 +775,6 @@ fun PreviewHomeMainView() {
     )
 
     AppTheme {
-        HomeMainView(allFavoriteStations = list, nearByStations = list)
+        HomeMainView(allFavoriteStations = list, nearByStations = list, onClick = {})
     }
 }

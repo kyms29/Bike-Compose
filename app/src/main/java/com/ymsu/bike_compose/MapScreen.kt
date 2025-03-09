@@ -41,7 +41,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +77,7 @@ import com.ymsu.bike_compose.data.StationInfoItem
 import com.ymsu.bike_compose.data.StationName
 import com.ymsu.bike_compose.theme.AppTheme
 import com.ymsu.bike_compose.theme.orange
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Calendar
 
@@ -90,7 +90,7 @@ fun MapScreen(viewModel: MainViewModel) {
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        val currentLatLng by viewModel.currentLatLng.collectAsState()
+        val currentLatLng by viewModel.currentLatLng.collectAsStateWithLifecycle()
 
         val cameraPositionState = rememberCameraPositionState {
             position = CameraPosition.fromLatLngZoom(currentLatLng, 12f)
@@ -98,25 +98,8 @@ fun MapScreen(viewModel: MainViewModel) {
 
         val context = LocalContext.current
 
-        LaunchedEffect(currentLatLng) {
-            cameraPositionState.animate(
-                // use animate seems can avoid map not ready issue...?
-                CameraUpdateFactory.newLatLngZoom(currentLatLng, 16f)
-            )
-        }
-
-        LaunchedEffect(cameraPositionState.isMoving) {
-            if (!cameraPositionState.isMoving) {
-                val position = cameraPositionState.position.target
-                Log.d(
-                    TAG,
-                    "cameraPositionState change to: ${position.latitude}, ${position.longitude}"
-                )
-                viewModel.fetchNearByStationInfo(position.latitude, position.longitude)
-            }
-        }
         var showStationInfo by remember { mutableStateOf(false) }
-        var selectedCompleteStationInfo by remember {
+        var selectedMarkerStationInfo by remember {
             mutableStateOf(
                 CompleteStationInfo(
                     StationInfoItem(),
@@ -127,7 +110,51 @@ fun MapScreen(viewModel: MainViewModel) {
         var selectedMarker by remember { mutableStateOf<LatLng?>(null) }
         val markerSizes = remember { mutableStateMapOf<LatLng, Float>() }
 
-        val completeStationInfos by viewModel.completeStationInfo.collectAsStateWithLifecycle()
+        val nearByStationInfos by viewModel.completeStationInfo.collectAsStateWithLifecycle()
+        val selectedStationFromHomeScreen by viewModel.selectedStation.collectAsStateWithLifecycle()
+
+        LaunchedEffect(currentLatLng) {
+            if (selectedStationFromHomeScreen == null) {
+                Log.d(TAG,"[MapScreen] currentLatLng is changed")
+                cameraPositionState.animate(
+                    // use animate seems can avoid map not ready issue...?
+                    CameraUpdateFactory.newLatLngZoom(currentLatLng, 16f)
+                )
+            }
+        }
+
+        LaunchedEffect(cameraPositionState.isMoving) {
+            if (!cameraPositionState.isMoving) {
+                if (selectedStationFromHomeScreen != null) {
+                    Log.d(TAG,"cameraPositionState delay 600")
+                    delay(600)
+                    viewModel.setSelectedStation(null)
+                }
+
+
+                val position = cameraPositionState.position.target
+                Log.d(TAG, "cameraPositionState change to: ${position.latitude}, ${position.longitude}")
+                Log.d(TAG,"[LaunchedEffect(cameraPositionState.isMoving)] called fetchNearByStationInfo")
+                viewModel.fetchNearByStationInfo(position.latitude, position.longitude)
+            }
+        }
+
+
+        LaunchedEffect(key1 = selectedStationFromHomeScreen) {
+            selectedStationFromHomeScreen?.let { it
+                val selectedLatLng = LatLng(it.stationInfoItem.StationPosition.PositionLat,
+                    it.stationInfoItem.StationPosition.PositionLon)
+                cameraPositionState.animate(
+                    // use animate seems can avoid map not ready issue...?
+                    CameraUpdateFactory.newLatLngZoom(selectedLatLng, 16f)
+                )
+                selectedMarker = selectedLatLng
+                markerSizes[selectedLatLng] = 1.3f
+                showStationInfo = true
+                selectedMarkerStationInfo = it
+            }
+        }
+
 
         Box(modifier = Modifier.fillMaxSize()) {
             GoogleMap(
@@ -149,7 +176,11 @@ fun MapScreen(viewModel: MainViewModel) {
                     radius = 1000.0
                 )
 
-                completeStationInfos.forEach { (stationInfo, availableInfo, isFavorite) ->
+                Log.d(TAG,"[MapScreen] nearByStationInfos size = "+nearByStationInfos.size)
+
+                nearByStationInfos.forEach { (stationInfo, availableInfo, isFavorite) ->
+//                    Log.d(TAG, "Drawing marker for station: ${stationInfo.StationName.Zh_tw}")
+
                     val icon = getRateIcon(
                         availableInfo.AvailableRentBikes,
                         availableInfo.AvailableReturnBikes
@@ -168,7 +199,7 @@ fun MapScreen(viewModel: MainViewModel) {
                             selectedMarker = markerPosition
                             markerSizes[markerPosition] = 1.3f
                             showStationInfo = true
-                            selectedCompleteStationInfo =
+                            selectedMarkerStationInfo =
                                 CompleteStationInfo(stationInfo, availableInfo, isFavorite)
                             true
                         },
@@ -187,25 +218,25 @@ fun MapScreen(viewModel: MainViewModel) {
                     latitude = currentLatLng.latitude
                     longitude = currentLatLng.longitude
                 }
-                BottomSheetDialog(currentLocation, selectedCompleteStationInfo,
+                BottomSheetDialog(currentLocation, selectedMarkerStationInfo,
                     onDismiss = {
                         showStationInfo = false
                         selectedMarker?.let { markerSizes[it] = 1f }
                         selectedMarker = null
                     },
                     onFavoriteClick = {
-                        viewModel.clickFavorite(selectedCompleteStationInfo.stationInfoItem.StationUID)
+                        viewModel.clickFavorite(selectedMarkerStationInfo.stationInfoItem.StationUID)
                     },
                     onShareClick = {
                         val sendIntent: Intent = Intent().apply {
                             val mapUri =
-                                "https://www.google.com/maps/dir/?api=1&destination=" + selectedCompleteStationInfo.stationInfoItem.StationPosition.PositionLat + ","
-                            +selectedCompleteStationInfo.stationInfoItem.StationPosition.PositionLon
+                                "https://www.google.com/maps/dir/?api=1&destination=" + selectedMarkerStationInfo.stationInfoItem.StationPosition.PositionLat + ","
+                            +selectedMarkerStationInfo.stationInfoItem.StationPosition.PositionLon
                             action = Intent.ACTION_SEND
                             putExtra(
                                 Intent.EXTRA_TEXT,
-                                selectedCompleteStationInfo.stationInfoItem.StationName.Zh_tw + "有" + selectedCompleteStationInfo.availableInfoItem.AvailableRentBikes.toString() + "可借" +
-                                        selectedCompleteStationInfo.availableInfoItem.AvailableReturnBikes.toString() + "可還"
+                                selectedMarkerStationInfo.stationInfoItem.StationName.Zh_tw + "有" + selectedMarkerStationInfo.availableInfoItem.AvailableRentBikes.toString() + "可借" +
+                                        selectedMarkerStationInfo.availableInfoItem.AvailableReturnBikes.toString() + "可還"
                                         + "，地點在$mapUri"
                             )
                             type = "text/plain"
@@ -219,7 +250,7 @@ fun MapScreen(viewModel: MainViewModel) {
                     },
                     onNavigateClick = {
                         val gmmIntentUri =
-                            Uri.parse("google.navigation:q=" + selectedCompleteStationInfo.stationInfoItem.StationPosition.PositionLat + "," + selectedCompleteStationInfo.stationInfoItem.StationPosition.PositionLon + "&mode=w")
+                            Uri.parse("google.navigation:q=" + selectedMarkerStationInfo.stationInfoItem.StationPosition.PositionLat + "," + selectedMarkerStationInfo.stationInfoItem.StationPosition.PositionLon + "&mode=w")
                         val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
                         mapIntent.setPackage("com.google.android.apps.maps")
                         context.startActivity(mapIntent)

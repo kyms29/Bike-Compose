@@ -186,8 +186,8 @@ fun BikeComposeApp(viewModel: MainViewModel, hasNetwork: LiveData<Boolean>, onRe
                 modifier = Modifier.padding(paddingValues)
             ) {
                 composable("Map") { MapScreen(viewModel) }
-                composable("Home") { HomeScreen(viewModel) }
-                composable("Settings") { SettingsScreen() }
+                composable("Home") { HomeScreen(viewModel,navController) }
+                composable("Settings") { SettingsScreen(viewModel) }
             }
 
             Log.d(TAG, "[BikeComposeApp] networkStatus = $networkStatus")
