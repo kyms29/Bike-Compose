@@ -113,6 +113,7 @@ fun MapScreen(viewModel: MainViewModel) {
         val nearByStationInfos by viewModel.completeStationInfo.collectAsStateWithLifecycle()
         val selectedStationFromHomeScreen by viewModel.selectedStation.collectAsStateWithLifecycle()
 
+
         LaunchedEffect(currentLatLng) {
             if (selectedStationFromHomeScreen == null) {
                 Log.d(TAG,"[MapScreen] currentLatLng is changed")
@@ -135,7 +136,7 @@ fun MapScreen(viewModel: MainViewModel) {
                 val position = cameraPositionState.position.target
                 Log.d(TAG, "cameraPositionState change to: ${position.latitude}, ${position.longitude}")
                 Log.d(TAG,"[LaunchedEffect(cameraPositionState.isMoving)] called fetchNearByStationInfo")
-                viewModel.fetchNearByStationInfo(position.latitude, position.longitude)
+                viewModel.setUpMapLocation(position.latitude,position.longitude)
             }
         }
 

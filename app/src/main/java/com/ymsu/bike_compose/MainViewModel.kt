@@ -38,9 +38,11 @@ class MainViewModel @Inject constructor(
     private val bikeService = BikeApiService.create()
     private val repository = BikeRepository(bikeService)
 
-    // request location
+    // request actual location
     private val _currentLatLng = MutableStateFlow(LatLng(25.048874128990544, 121.513878757331))
     val currentLatLng = _currentLatLng.asStateFlow()
+    // map location
+    private var _mapLocation = LatLng(25.048874128990544, 121.513878757331)
 
     private val _favoriteStations = MutableStateFlow<Set<String>>(emptySet())
 
@@ -87,6 +89,7 @@ class MainViewModel @Inject constructor(
     val range = _range.asStateFlow()
 
     init {
+        // get actual location first
         locationRepository.startRequestLocation()
 
         viewModelScope.launch {
@@ -97,6 +100,8 @@ class MainViewModel @Inject constructor(
                 }
             }
         }
+
+        // get favorite list
         viewModelScope.launch {
             favoriteRepository.getAll()
                 .map { stations -> stations.map { it.stationUid }.toSet() }
@@ -129,6 +134,7 @@ class MainViewModel @Inject constructor(
 
         fetchAllStations()
         fetchAllAvailability()
+        startPeriodFetchData()
 
         // combine _allStations and _allAvailable first
         combine(_allStations, _allAvailable) { allStations, allAvailable ->
@@ -158,6 +164,17 @@ class MainViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
 
+    private fun startPeriodFetchData(){
+        viewModelScope.launch {
+            while (true) {
+                delay(60*1000)
+                fetchNearByStationInfo()
+                fetchAllStations()
+                fetchAllAvailability()
+            }
+        }
+    }
+
     fun setSelectedStation(stationInfo: CompleteStationInfo?) {
         _selectedStation.value = stationInfo
         if (stationInfo != null) {
@@ -172,9 +189,15 @@ class MainViewModel @Inject constructor(
         _range.value = range
     }
 
-    fun fetchNearByStationInfo(latitude: Double, longitude: Double, distance: MutableStateFlow<Int> = _range) {
-        Log.d(TAG,"[fetchNearByStationInfo] Distance = ${distance.value}")
-        val nearbyString = "nearby($latitude, $longitude, ${distance.value})"
+    fun setUpMapLocation(latitude: Double,longitude: Double){
+        Log.d(TAG,"[setUpMapLocation] latitude = $latitude, longitude = $longitude")
+        _mapLocation = LatLng(latitude,longitude)
+        fetchNearByStationInfo()
+    }
+
+    private fun fetchNearByStationInfo() {
+        Log.d(TAG,"[fetchNearByStationInfo] Distance = ${_range.value}")
+        val nearbyString = "nearby(${_mapLocation.latitude}, ${_mapLocation.longitude}, ${_range.value})"
 
         fetchNearByJob?.cancel()
         fetchNearByJob = viewModelScope.launch {

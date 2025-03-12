@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.navigation.NavController
@@ -69,11 +70,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val viewModel: MainViewModel by viewModels()
 
         isNetworkConnect()
         setContent {
-            CheckPermissions(viewModel,hasNetwork, onRetry = { isNetworkConnect() })
+            CheckPermissions(hasNetwork, onRetry = { isNetworkConnect() })
         }
     }
 
@@ -110,7 +110,6 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalPermissionsApi::class)
     @Composable
     private fun CheckPermissions(
-        viewModel: MainViewModel,
         hasNetwork: MutableLiveData<Boolean>,
         onRetry: () -> Unit
     ) {
@@ -148,9 +147,12 @@ class MainActivity : ComponentActivity() {
         isPermissionGranted = locationPermissionsState.permissions.all { it.status.isGranted }
 
         if (isPermissionGranted) {
-            BikeComposeApp(viewModel, hasNetwork, onRetry)
+            BikeComposeApp(hasNetwork, onRetry)
         } else {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).clickable(enabled = false) {  },
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.5f))
+                .clickable(enabled = false) { },
                 contentAlignment = Alignment.Center) {
                 Text("Need granted location permissions!")
             }
@@ -170,11 +172,12 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun BikeComposeApp(viewModel: MainViewModel, hasNetwork: LiveData<Boolean>, onRetry: () -> Unit) {
+fun BikeComposeApp(hasNetwork: LiveData<Boolean>, onRetry: () -> Unit) {
     val networkStatus by hasNetwork.observeAsState(true)
 
     AppTheme {
         val navController = rememberNavController()
+        val viewModel: MainViewModel = hiltViewModel()
 
         Scaffold(
             bottomBar = {

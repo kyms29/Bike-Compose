@@ -130,4 +130,6 @@ dependencies {
 
     //Shimmer
     implementation("com.google.accompanist:accompanist-placeholder:0.31.1-alpha")
+
+    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
 }
