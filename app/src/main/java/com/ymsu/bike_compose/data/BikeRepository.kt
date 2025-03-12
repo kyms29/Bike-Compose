@@ -13,11 +13,9 @@ import java.lang.Exception
 import javax.inject.Inject
 
 class BikeRepository(private val apiService: BikeApiService) {
-    // 用state flow? or flow?
-    suspend fun getStationInfo(city: String): List<StationInfoItem> =  apiService.getStationInfo(city)
-    suspend fun getAvailableInfo(city: String):List<AvailableInfoItem> = apiService.getAvailableInfo(city)
-    suspend fun getNearByStationInfo(nearBy: String): List<StationInfoItem> =  apiService.getStationInfoNearBy(nearBy)
-    suspend fun getNearByAvailableInfo(nearBy: String): List<AvailableInfoItem> =  apiService.getAvailabilityInfoNearBy(nearBy)
+    suspend fun getAllStationFromFlask(): List<StationInfoFromFlaskItem> = apiService.getAllStationsFromFlask()
+    suspend fun getNearByStationFromFlask(lat:Float,lng:Float,range:Float): List<StationInfoFromFlaskItem> =
+        apiService.getNearByStationsFromFlask(lat, lng, range)
 
     private fun <T> safeApiCall( call : suspend ()->T): Flow<ApiResult<T>> = flow {
         emit(ApiResult.Loading)
@@ -31,7 +29,7 @@ class BikeRepository(private val apiService: BikeApiService) {
 
     private fun handleException(exception: Throwable): String{
         return when(exception) {
-            is IOException -> "網路連線錯誤"
+            is IOException -> "Connection error: ${exception.message}"
             is HttpException -> "Server error: ${exception.code()}"
             else -> "Unknown error: ${exception.localizedMessage}"
         }

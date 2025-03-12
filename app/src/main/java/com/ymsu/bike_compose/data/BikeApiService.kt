@@ -11,20 +11,18 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface BikeApiService {
-    @GET("api/basic/v2/Bike/Station/City/{City}")
-    suspend fun getStationInfo(@Path("City") city: String): List<StationInfoItem>
+    @GET("all_stations")
+    suspend fun getAllStationsFromFlask() : List<StationInfoFromFlaskItem>
 
-    @GET("api/basic/v2/Bike/Availability/City/{City}")
-    suspend fun getAvailableInfo(@Path("City") city: String) : List<AvailableInfoItem>
-
-    @GET("api/advanced/v2/Bike/Station/NearBy")
-    suspend fun getStationInfoNearBy(@Query("\$spatialFilter") nearBy: String): List<StationInfoItem>
-
-    @GET("api/advanced/v2/Bike/Availability/NearBy")
-    suspend fun getAvailabilityInfoNearBy(@Query("\$spatialFilter") nearBy: String): List<AvailableInfoItem>
+    @GET("nearby_stations")
+    suspend fun getNearByStationsFromFlask(
+        @Query("lat") lat: Float,
+        @Query("lng") lng: Float,
+        @Query("range") range: Float
+    ): List<StationInfoFromFlaskItem>
 
     companion object {
-        private const val TDX_URL = "https://tdx.transportdata.tw/"
+        private const val FLASK_URL = "http://172.20.10.13:5000/"
 
         fun create(): BikeApiService {
             val tokenManager = TokenManager
@@ -32,7 +30,7 @@ interface BikeApiService {
 
             return Retrofit
                 .Builder()
-                .baseUrl(TDX_URL)
+                .baseUrl(FLASK_URL)
                 .client(client)
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()

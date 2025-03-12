@@ -72,7 +72,9 @@ import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.ymsu.bike_compose.data.AvailableInfoItem
 import com.ymsu.bike_compose.data.CompleteStationInfo
+import com.ymsu.bike_compose.data.FlaskItemWithFavorite
 import com.ymsu.bike_compose.data.StationAddress
+import com.ymsu.bike_compose.data.StationInfoFromFlaskItem
 import com.ymsu.bike_compose.data.StationInfoItem
 import com.ymsu.bike_compose.data.StationName
 import com.ymsu.bike_compose.theme.AppTheme
@@ -101,16 +103,15 @@ fun MapScreen(viewModel: MainViewModel) {
         var showStationInfo by remember { mutableStateOf(false) }
         var selectedMarkerStationInfo by remember {
             mutableStateOf(
-                CompleteStationInfo(
-                    StationInfoItem(),
-                    AvailableInfoItem()
+                FlaskItemWithFavorite(
+                    StationInfoFromFlaskItem()
                 )
             )
         }
         var selectedMarker by remember { mutableStateOf<LatLng?>(null) }
         val markerSizes = remember { mutableStateMapOf<LatLng, Float>() }
 
-        val nearByStationInfos by viewModel.completeStationInfo.collectAsStateWithLifecycle()
+        val nearByStationInfos by viewModel.nearByStationWithFavorite.collectAsStateWithLifecycle()
         val selectedStationFromHomeScreen by viewModel.selectedStation.collectAsStateWithLifecycle()
 
 
@@ -143,8 +144,8 @@ fun MapScreen(viewModel: MainViewModel) {
 
         LaunchedEffect(key1 = selectedStationFromHomeScreen) {
             selectedStationFromHomeScreen?.let { it
-                val selectedLatLng = LatLng(it.stationInfoItem.StationPosition.PositionLat,
-                    it.stationInfoItem.StationPosition.PositionLon)
+                val selectedLatLng = LatLng(it.stationInfoFromFlaskItem.lat,
+                    it.stationInfoFromFlaskItem.lng)
                 cameraPositionState.animate(
                     // use animate seems can avoid map not ready issue...?
                     CameraUpdateFactory.newLatLngZoom(selectedLatLng, 16f)
@@ -179,29 +180,29 @@ fun MapScreen(viewModel: MainViewModel) {
 
                 Log.d(TAG,"[MapScreen] nearByStationInfos size = "+nearByStationInfos.size)
 
-                nearByStationInfos.forEach { (stationInfo, availableInfo, isFavorite) ->
+                nearByStationInfos.forEach { (stationInfo, isFavorite, distance) ->
 //                    Log.d(TAG, "Drawing marker for station: ${stationInfo.StationName.Zh_tw}")
 
                     val icon = getRateIcon(
-                        availableInfo.AvailableRentBikes,
-                        availableInfo.AvailableReturnBikes
+                        stationInfo.available_bikes+stationInfo.available_e_bikes,
+                        stationInfo.available_return
                     )
                     val markerPosition = LatLng(
-                        stationInfo.StationPosition.PositionLat,
-                        stationInfo.StationPosition.PositionLon
+                        stationInfo.lat,
+                        stationInfo.lng
                     )
                     val markerSize = markerSizes[markerPosition] ?: 1f
                     Marker(
                         state = MarkerState(
                             position = markerPosition
                         ),
-                        title = stationInfo.StationName.Zh_tw,
+                        title = stationInfo.station_name,
                         onClick = {
                             selectedMarker = markerPosition
                             markerSizes[markerPosition] = 1.3f
                             showStationInfo = true
                             selectedMarkerStationInfo =
-                                CompleteStationInfo(stationInfo, availableInfo, isFavorite)
+                                FlaskItemWithFavorite(stationInfo,isFavorite,distance)
                             true
                         },
                         icon = vectorToBitmapDescriptor(
@@ -226,18 +227,19 @@ fun MapScreen(viewModel: MainViewModel) {
                         selectedMarker = null
                     },
                     onFavoriteClick = {
-                        viewModel.clickFavorite(selectedMarkerStationInfo.stationInfoItem.StationUID)
+                        viewModel.clickFavorite(selectedMarkerStationInfo.stationInfoFromFlaskItem.station_uid)
                     },
                     onShareClick = {
                         val sendIntent: Intent = Intent().apply {
                             val mapUri =
-                                "https://www.google.com/maps/dir/?api=1&destination=" + selectedMarkerStationInfo.stationInfoItem.StationPosition.PositionLat + ","
-                            +selectedMarkerStationInfo.stationInfoItem.StationPosition.PositionLon
+                                "https://www.google.com/maps/dir/?api=1&destination=" + selectedMarkerStationInfo.stationInfoFromFlaskItem.lat + ","
+                            +selectedMarkerStationInfo.stationInfoFromFlaskItem.lng
                             action = Intent.ACTION_SEND
                             putExtra(
                                 Intent.EXTRA_TEXT,
-                                selectedMarkerStationInfo.stationInfoItem.StationName.Zh_tw + "有" + selectedMarkerStationInfo.availableInfoItem.AvailableRentBikes.toString() + "可借" +
-                                        selectedMarkerStationInfo.availableInfoItem.AvailableReturnBikes.toString() + "可還"
+                                selectedMarkerStationInfo.stationInfoFromFlaskItem.station_name + "有" +
+                                        (selectedMarkerStationInfo.stationInfoFromFlaskItem.available_bikes + selectedMarkerStationInfo.stationInfoFromFlaskItem.available_e_bikes).toString()+ "可借" +
+                                        selectedMarkerStationInfo.stationInfoFromFlaskItem.available_return.toString() + "可還"
                                         + "，地點在$mapUri"
                             )
                             type = "text/plain"
@@ -251,7 +253,7 @@ fun MapScreen(viewModel: MainViewModel) {
                     },
                     onNavigateClick = {
                         val gmmIntentUri =
-                            Uri.parse("google.navigation:q=" + selectedMarkerStationInfo.stationInfoItem.StationPosition.PositionLat + "," + selectedMarkerStationInfo.stationInfoItem.StationPosition.PositionLon + "&mode=w")
+                            Uri.parse("google.navigation:q=" + selectedMarkerStationInfo.stationInfoFromFlaskItem.lat + "," + selectedMarkerStationInfo.stationInfoFromFlaskItem.lng + "&mode=w")
                         val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
                         mapIntent.setPackage("com.google.android.apps.maps")
                         context.startActivity(mapIntent)
@@ -282,7 +284,7 @@ fun MapScreen(viewModel: MainViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BottomSheetDialog(currentLocation: Location, completeStationInfo: CompleteStationInfo,
+private fun BottomSheetDialog(currentLocation: Location, completeStationInfo: FlaskItemWithFavorite,
                               onDismiss: () -> Unit, onFavoriteClick: () -> Unit, onShareClick: () -> Unit, onNavigateClick: () -> Unit
 ) {
     ModalBottomSheet(
@@ -299,7 +301,7 @@ private fun BottomSheetDialog(currentLocation: Location, completeStationInfo: Co
 }
 
 @Composable
-private fun DialogContent(completeStationInfo: CompleteStationInfo, currentLocation: Location) {
+private fun DialogContent(completeStationInfo: FlaskItemWithFavorite, currentLocation: Location) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -316,7 +318,7 @@ private fun DialogContent(completeStationInfo: CompleteStationInfo, currentLocat
                             .padding(top = 20.dp, bottom = 20.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
-                        text = completeStationInfo.availableInfoItem.AvailableRentBikesDetail.GeneralBikes.toString()+"可借"
+                        text = completeStationInfo.stationInfoFromFlaskItem.available_bikes.toString()+"可借"
                     )
                 }
                 Icon(imageVector = Icons.Default.DirectionsBike, contentDescription = "Bike",
@@ -337,7 +339,7 @@ private fun DialogContent(completeStationInfo: CompleteStationInfo, currentLocat
                             .padding(top = 20.dp, bottom = 20.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
-                        text = completeStationInfo.availableInfoItem.AvailableRentBikesDetail.ElectricBikes.toString()+"可借"
+                        text = completeStationInfo.stationInfoFromFlaskItem.available_e_bikes.toString()+"可借"
                     )
                 }
                 Icon(imageVector = Icons.Default.ElectricBolt, contentDescription = "Bike",
@@ -358,7 +360,7 @@ private fun DialogContent(completeStationInfo: CompleteStationInfo, currentLocat
                             .padding(top = 20.dp, bottom = 20.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
-                        text = completeStationInfo.availableInfoItem.AvailableReturnBikes.toString()+"可還"
+                        text = completeStationInfo.stationInfoFromFlaskItem.available_return.toString()+"可還"
                     )
                 }
                 Icon(imageVector = Icons.Default.LocalParking, contentDescription = "Bike",
@@ -376,7 +378,7 @@ private fun DialogContent(completeStationInfo: CompleteStationInfo, currentLocat
 
             var currentTimeDate = Calendar.getInstance().time
             var diff =
-                (currentTimeDate.time - convertTime(completeStationInfo.stationInfoItem.UpdateTime).time.time) / 1000
+                (currentTimeDate.time - convertTime(completeStationInfo.stationInfoFromFlaskItem.update_time).time.time) / 1000
 
             Text(
                 modifier = Modifier
@@ -405,18 +407,18 @@ private fun DialogContent(completeStationInfo: CompleteStationInfo, currentLocat
         Text(
             modifier = Modifier.padding(top = 20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
-            text = completeStationInfo.stationInfoItem.StationName.Zh_tw.substringAfter("_")
+            text = completeStationInfo.stationInfoFromFlaskItem.station_name.substringAfter("_")
         )
         Text(
             modifier = Modifier.padding(top = 20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
-            text = completeStationInfo.stationInfoItem.StationAddress.Zh_tw
+            text = completeStationInfo.stationInfoFromFlaskItem.station_address
         )
     }
 }
 
 @Composable
-private fun BottomRowContent(completeStationInfo: CompleteStationInfo, onFavoriteClick: () -> Unit, onShareClick: () -> Unit, onNavigateClick: () -> Unit) {
+private fun BottomRowContent(completeStationInfo: FlaskItemWithFavorite, onFavoriteClick: () -> Unit, onShareClick: () -> Unit, onNavigateClick: () -> Unit) {
     var isFavorite by remember {
         mutableStateOf(completeStationInfo.isFavorite)
     }
@@ -544,9 +546,8 @@ fun PreviewBottomSheetDialog() {
     AppTheme {
         Surface(color = MaterialTheme.colorScheme.onPrimaryContainer) {
             DialogContent(currentLocation = currentLocation,
-                completeStationInfo = CompleteStationInfo(
-                    StationInfoItem(StationAddress = StationAddress(Zh_tw = "測試地址用"), StationName = StationName(Zh_tw = "測試站名用")),
-                    AvailableInfoItem()
+                completeStationInfo = FlaskItemWithFavorite(
+                    StationInfoFromFlaskItem(station_address = "測試地址用", station_name = "測試站名用")
                 )
             )
         }
@@ -557,7 +558,7 @@ fun PreviewBottomSheetDialog() {
 @Composable
 fun PreviewBottomRowContent() {
     AppTheme {
-        BottomRowContent(completeStationInfo = CompleteStationInfo(StationInfoItem(),AvailableInfoItem()), onFavoriteClick = {}, onShareClick = {}, onNavigateClick = {})
+        BottomRowContent(completeStationInfo = FlaskItemWithFavorite(StationInfoFromFlaskItem()), onFavoriteClick = {}, onShareClick = {}, onNavigateClick = {})
     }
 }
 

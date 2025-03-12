@@ -10,6 +10,8 @@ import com.ymsu.bike_compose.data.AvailableInfoItem
 import com.ymsu.bike_compose.data.BikeApiService
 import com.ymsu.bike_compose.data.BikeRepository
 import com.ymsu.bike_compose.data.CompleteStationInfo
+import com.ymsu.bike_compose.data.FlaskItemWithFavorite
+import com.ymsu.bike_compose.data.StationInfoFromFlaskItem
 import com.ymsu.bike_compose.data.StationInfoItem
 import com.ymsu.bike_compose.room.FavoriteRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -46,43 +48,34 @@ class MainViewModel @Inject constructor(
 
     private val _favoriteStations = MutableStateFlow<Set<String>>(emptySet())
 
-    private val _nearByStations = MutableStateFlow<List<StationInfoItem>>(emptyList())
-
-    private val _nearByAvailable = MutableStateFlow<List<AvailableInfoItem>>(emptyList())
-
-    private val _completeStationInfo = MutableStateFlow<List<CompleteStationInfo>>(emptyList())
-    val completeStationInfo = _completeStationInfo.asStateFlow()
-
     private var fetchNearByJob: Job? = null
-
-    private val cities = listOf(
-        "Taichung", "Hsinchu", "MiaoliCounty", "ChanghuaCounty", "NewTaipei", "YunlinCounty", "ChiayiCounty",
-        "PingtungCounty", "TaitungCounty", "Taoyuan", "Taipei", "Kaohsiung", "Tainan", "Chiayi", "HsinchuCounty"
-    )
-    private val _allStations = MutableStateFlow<List<StationInfoItem>>(emptyList())
-    private val _allAvailable = MutableStateFlow<List<AvailableInfoItem>>(emptyList())
-    private val _allFavoriteStations = MutableStateFlow<List<CompleteStationInfo>>(emptyList())
-    val allFavoriteStations = _allFavoriteStations.asStateFlow()
     private var allStationsJob: Job? = null
-    private var allAvailableJob: Job? = null
 
-    private val _allCityStationsInfo = MutableStateFlow<List<CompleteStationInfo>>(emptyList())
+    private var _allStationFromFlask = MutableStateFlow<List<StationInfoFromFlaskItem>>(emptyList())
+    private var _allStationWithFavorite = MutableStateFlow<List<FlaskItemWithFavorite>>(emptyList())
+
+    private var _nearByStationFromFlask = MutableStateFlow<List<StationInfoFromFlaskItem>>(emptyList())
+    private var _nearByStationWithFavorite = MutableStateFlow<List<FlaskItemWithFavorite>>(emptyList())
+    val nearByStationWithFavorite = _nearByStationWithFavorite.asStateFlow()
+
+    private var _allFavoriteStations = MutableStateFlow<List<FlaskItemWithFavorite>>(emptyList())
+    val allFavoriteStations = _allFavoriteStations.asStateFlow()
 
     private val _queryStations = MutableStateFlow("")
     val filterStations = _queryStations
         .flatMapLatest { query ->
-            _allCityStationsInfo.map { stations ->
+            _allStationWithFavorite.map { stations ->
                 if (query.isEmpty()) {
                     emptyList()
                 } else {
-                    _allCityStationsInfo.value.filter {
-                        it.stationInfoItem.StationName.Zh_tw.contains(query, ignoreCase = true)
+                    _allStationWithFavorite.value.filter {
+                        it.stationInfoFromFlaskItem.station_name.contains(query, ignoreCase = true)
                     }.sortedBy { it.distance }
                 }
             }
         }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    private val _selectedStation = MutableStateFlow<CompleteStationInfo?>(null)
+    private val _selectedStation = MutableStateFlow<FlaskItemWithFavorite?>(null)
     val selectedStation = _selectedStation.asStateFlow()
 
     private val _range = MutableStateFlow(1000)
@@ -108,60 +101,58 @@ class MainViewModel @Inject constructor(
                 .collect { _favoriteStations.value = it }
         }
 
-        combine(
-            _nearByStations,
-            _nearByAvailable,
-            _favoriteStations
-        ) { nearByStations, nearByAvailibles, favorites ->
-            Log.d(TAG, "combine flow trigger")
-            nearByStations.map { stationInfo ->
-                val isFavorite = stationInfo.StationUID in favorites
-                val available = nearByAvailibles.find { it.StationUID == stationInfo.StationUID } ?: AvailableInfoItem()
+        combine(_nearByStationFromFlask,_favoriteStations) { nearByStationFromFlask,favoriteList->
+            nearByStationFromFlask.map { station->
+                val isFavorite = station.station_uid in favoriteList
                 val currentLocation = Location(LocationManager.NETWORK_PROVIDER).apply {
                     latitude = _currentLatLng.value.latitude
                     longitude = _currentLatLng.value.longitude
                 }
-                val distance = getStationDistance(LatLng(stationInfo.StationPosition.PositionLat, stationInfo.StationPosition.PositionLon), currentLocation)
-                Log.d(TAG, "combine flow station name => " + stationInfo.StationName.Zh_tw)
-                CompleteStationInfo(stationInfo, available, isFavorite, distance)
+                val distance = getStationDistance(LatLng(station.lat, station.lng), currentLocation)
+                FlaskItemWithFavorite(station,isFavorite,distance)
             }.sortedBy { it.distance }
-        }
-            .onEach {
-                Log.d(TAG, "Processed stations: ${it.size}")
-                _completeStationInfo.value = it
-            }.flowOn(Dispatchers.IO)
-            .launchIn(viewModelScope)
+        }.onEach {
+            _nearByStationWithFavorite.value = it
+        }.flowOn(
+            Dispatchers.IO
+        ).launchIn(
+            viewModelScope
+        )
 
         fetchAllStations()
-        fetchAllAvailability()
         startPeriodFetchData()
 
-        // combine _allStations and _allAvailable first
-        combine(_allStations, _allAvailable) { allStations, allAvailable ->
-            allStations.map { stationInfo ->
-                val availableInfo = allAvailable.find { it.StationUID == stationInfo.StationUID } ?: AvailableInfoItem()
+        _allStationFromFlask.combine(_favoriteStations) { allStationFromFlask,favoriteList ->
+            allStationFromFlask.map { station ->
+                val isFavorite = station.station_uid in favoriteList
                 val currentLocation = Location(LocationManager.NETWORK_PROVIDER).apply {
                     latitude = _currentLatLng.value.latitude
                     longitude = _currentLatLng.value.longitude
                 }
                 val distance = getStationDistance(
                     LatLng(
-                        stationInfo.StationPosition.PositionLat,
-                        stationInfo.StationPosition.PositionLon
+                        station.lat,
+                        station.lng
                     ), currentLocation
                 )
-                CompleteStationInfo(stationInfo, availableInfo, false, distance)
+                FlaskItemWithFavorite(station,isFavorite,distance)
             }
-        }.onEach { _allCityStationsInfo.value = it }.flowOn(Dispatchers.IO)
-            .launchIn(viewModelScope)
+        }.onEach {
+            _allStationWithFavorite.value = it
+        }.flowOn(
+            Dispatchers.IO
+        ).launchIn(
+            viewModelScope
+        )
 
-        _allCityStationsInfo.combine(_favoriteStations) { _allStationAndAvailable, favoriteList ->
-            _allStationAndAvailable.map { stationAndAvailable ->
-                val isFavorite = stationAndAvailable.stationInfoItem.StationUID in favoriteList
-                CompleteStationInfo(stationAndAvailable.stationInfoItem, stationAndAvailable.availableInfoItem, isFavorite, stationAndAvailable.distance)
-            }.filter { it.isFavorite }.sortedBy { it.distance }
-        }.onEach { _allFavoriteStations.value = it }.flowOn(Dispatchers.IO)
-            .launchIn(viewModelScope)
+        _allStationWithFavorite.onEach {
+            val favoriteStations = it.filter { item -> item.isFavorite }
+            _allFavoriteStations.value = favoriteStations.sortedBy { it.distance }
+        }.flowOn(
+            Dispatchers.IO
+        ).launchIn(
+            viewModelScope
+        )
     }
 
     private fun startPeriodFetchData(){
@@ -170,17 +161,16 @@ class MainViewModel @Inject constructor(
                 delay(60*1000)
                 fetchNearByStationInfo()
                 fetchAllStations()
-                fetchAllAvailability()
             }
         }
     }
 
-    fun setSelectedStation(stationInfo: CompleteStationInfo?) {
+    fun setSelectedStation(stationInfo: FlaskItemWithFavorite?) {
         _selectedStation.value = stationInfo
         if (stationInfo != null) {
             Log.d(
                 TAG, "[setSelectedStation] called fetchNearByStationInfo, station " +
-                        "lat = ${stationInfo.stationInfoItem.StationPosition.PositionLat} , lon = ${stationInfo.stationInfoItem.StationPosition.PositionLon}"
+                        "lat = ${stationInfo.stationInfoFromFlaskItem.lat} , lon = ${stationInfo.stationInfoFromFlaskItem.lng}"
             )
         }
     }
@@ -197,56 +187,70 @@ class MainViewModel @Inject constructor(
 
     private fun fetchNearByStationInfo() {
         Log.d(TAG,"[fetchNearByStationInfo] Distance = ${_range.value}")
-        val nearbyString = "nearby(${_mapLocation.latitude}, ${_mapLocation.longitude}, ${_range.value})"
 
         fetchNearByJob?.cancel()
         fetchNearByJob = viewModelScope.launch {
-            Log.d(TAG, "[fetchNearByStationInfo] called , nearbyString : ${nearbyString}")
-            val nearByStations = repository.getNearByStationInfo(nearbyString)
-            _nearByStations.value = nearByStations
-            Log.d(TAG, "[fetchNearByStationInfo] _nearByStations size  : ${_nearByStations.value.size}")
-            val nearByAvailable = repository.getNearByAvailableInfo(nearbyString)
-            _nearByAvailable.value = nearByAvailable
-            Log.d(TAG, "[fetchNearByStationInfo] _nearByAvailable size  : ${_nearByAvailable.value.size}")
+            val nearByStations = repository.getNearByStationFromFlask(_mapLocation.latitude.toFloat()
+                ,_mapLocation.longitude.toFloat(),(range.value.toFloat()/1000))
+            _nearByStationFromFlask.value = nearByStations
+            Log.d(TAG, "[fetchNearByStationInfo] _nearByStationFromFlask size  : ${_nearByStationFromFlask.value.size}")
         }
     }
 
     private fun fetchAllStations() {
         allStationsJob?.cancel()
         allStationsJob = viewModelScope.launch(Dispatchers.IO) {
-            val allStations = mutableListOf<StationInfoItem>()
-            for (city in cities) {
-                try {
-                    delay(400)
-                    val response = repository.getStationInfo(city)
-                    allStations.addAll(response)
-
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+            val allStations = mutableListOf<StationInfoFromFlaskItem>()
+            try {
+                delay(400)
+                val response = repository.getAllStationFromFlask()
+                allStations.addAll(response)
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-            _allStations.value = allStations
-            Log.d(TAG, "[fetchAllStations] _allStations size  : ${_allStations.value.size}")
+            _allStationFromFlask.value = allStations
+            Log.d(TAG, "[fetchAllStations] _allStationFromFlask size  : ${_allStationFromFlask.value.size}")
         }
     }
 
-    private fun fetchAllAvailability() {
-        allAvailableJob?.cancel()
-        allAvailableJob = viewModelScope.launch(Dispatchers.IO) {
-            val allAvailabilities = mutableListOf<AvailableInfoItem>()
-            for (city in cities) {
-                try {
-                    delay(400)
-                    val response = repository.getAvailableInfo(city)
-                    allAvailabilities.addAll(response)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-            _allAvailable.value = allAvailabilities
-            Log.d(TAG, "[fetchAllAvailability] _allAvailable size  : ${_allAvailable.value.size}")
-        }
-    }
+//    private fun fetchAllStations() {
+//        allStationsJob?.cancel()
+//        allStationsJob = viewModelScope.launch(Dispatchers.IO) {
+//            val allStations = mutableListOf<StationInfoItem>()
+//            for (city in cities) {
+//                try {
+//                    delay(400)
+//                    val response = repository.getStationInfo(city)
+//                    allStations.addAll(response)
+//                    val response = repository.getAvailableInfo(city)
+//                    allStations.addAll(response)
+//
+//                } catch (e: Exception) {
+//                    e.printStackTrace()
+//                }
+//            }
+//            _allStations.value = allStations
+//            Log.d(TAG, "[fetchAllStations] _allStations size  : ${_allStations.value.size}")
+//        }
+//    }
+
+//    private fun fetchAllAvailability() {
+//        allAvailableJob?.cancel()
+//        allAvailableJob = viewModelScope.launch(Dispatchers.IO) {
+//            val allAvailabilities = mutableListOf<AvailableInfoItem>()
+//            for (city in cities) {
+//                try {
+//                    delay(400)
+//                    val response = repository.getAvailableInfo(city)
+//                    allAvailabilities.addAll(response)
+//                } catch (e: Exception) {
+//                    e.printStackTrace()
+//                }
+//            }
+//            _allAvailable.value = allAvailabilities
+//            Log.d(TAG, "[fetchAllAvailability] _allAvailable size  : ${_allAvailable.value.size}")
+//        }
+//    }
 
 
     fun clickFavorite(stationUid: String) {
