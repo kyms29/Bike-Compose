@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import coil.compose.rememberAsyncImagePainter
 import com.google.accompanist.placeholder.PlaceholderHighlight
 import com.google.accompanist.placeholder.placeholder
 import com.google.accompanist.placeholder.shimmer
@@ -418,7 +419,7 @@ fun FavoriteStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskIt
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
 
-        itemsIndexed(if (isLoading) List(1) {
+        itemsIndexed(if (isLoading) List(2) {
             FlaskItemWithFavorite(
                 StationInfoFromFlaskItem()
             )
@@ -455,7 +456,7 @@ fun FavoriteStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskIt
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Image(
-                            painter = painterResource(id = R.drawable.pic),
+                            painter =  rememberAsyncImagePainter(station.stationInfoFromFlaskItem.image_url),
                             contentDescription = "",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
@@ -567,7 +568,7 @@ fun BikeStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskItemWi
     ) {
 
         itemsIndexed(
-            if (isLoading) List(10) { FlaskItemWithFavorite(StationInfoFromFlaskItem())
+            if (isLoading) List(2) { FlaskItemWithFavorite(StationInfoFromFlaskItem())
         } else stations) { index, station ->
             val layoutInfo = lazyListState.layoutInfo
             val viewportCenter =
@@ -601,7 +602,7 @@ fun BikeStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskItemWi
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Image(
-                        painter = painterResource(id = R.drawable.pic),
+                        painter =  rememberAsyncImagePainter(station.stationInfoFromFlaskItem.image_url),
                         contentDescription = "",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier

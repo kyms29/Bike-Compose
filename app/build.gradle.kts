@@ -132,4 +132,6 @@ dependencies {
     implementation("com.google.accompanist:accompanist-placeholder:0.31.1-alpha")
 
     implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
+
+    implementation("io.coil-kt:coil-compose:2.6.0")
 }

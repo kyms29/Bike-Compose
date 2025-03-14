@@ -22,16 +22,12 @@ interface BikeApiService {
     ): List<StationInfoFromFlaskItem>
 
     companion object {
-        private const val FLASK_URL = "http://172.20.10.13:5000/"
+        private const val FLASK_URL = "http://10.113.161.59:5000/"
 
         fun create(): BikeApiService {
-            val tokenManager = TokenManager
-            val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(tokenManager)).build()
-
             return Retrofit
                 .Builder()
                 .baseUrl(FLASK_URL)
-                .client(client)
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
                 .create(BikeApiService::class.java)
