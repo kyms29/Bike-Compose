@@ -4,7 +4,8 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "favoriteStation")
-data class FavoriteStation(
-    @PrimaryKey var stationUid: String
+@Entity(tableName = "Settings")
+data class Settings(
+    @PrimaryKey val key : String,
+    @ColumnInfo val value: String
 )

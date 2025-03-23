@@ -1,6 +1,6 @@
 package com.ymsu.bike_compose.data
 
-data class StationInfoFromFlaskItem(
+data class StationInfoDetail(
     val available_bikes: Int = 0,
     val available_e_bikes: Int = 0,
     val available_return: Int = 0,

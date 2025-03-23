@@ -25,18 +25,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.gms.maps.model.LatLng
 import com.ymsu.bike_compose.theme.AppTheme
 
 @Composable
 fun SettingsScreen(viewModel: MainViewModel) {
+
     val onRangeChanged: (Int) -> Unit = { range ->
         viewModel.setupRange(range)
     }
 
     val range = viewModel.range.collectAsStateWithLifecycle()
 
-    Content(onRangeChanged,range)
+    Content(onRangeChanged, range)
 }
 
 @Composable
@@ -47,11 +48,9 @@ private fun Content(onRangeChanged: (Int) -> Unit, range: State<Int>) {
             .padding(36.dp)
     ) {
 
-        SetupCity()
-
         Spacer(modifier = Modifier.height(24.dp))
 
-        SetupRange(onRangeChanged,range)
+        SetupRange(onRangeChanged, range)
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -79,24 +78,28 @@ private fun SetupRange(onRangeChanged: (Int) -> Unit, range: State<Int>) {
         mutableStateOf(false)
     }
 
-    val rangeList = listOf(1000,500,250)
+    val rangeMap = mapOf(
+        "1公里" to 1000,
+        "500公尺" to 500,
+        "250公尺" to 250
+    )
 
     var selectedRange by remember {
         mutableIntStateOf(range.value)
     }
 
     ExposedDropdownMenuBox(expanded = expanded,
-        onExpandedChange = {expanded = !expanded}) {
+        onExpandedChange = { expanded = !expanded }) {
 
         TextField(
             modifier = Modifier
                 .fillMaxWidth()
                 .menuAnchor(),
-            value = selectedRange.toString(),
+            value = rangeMap.entries.find { it.value == selectedRange }?.key ?: "",
             onValueChange = {},
             colors = TextFieldDefaults.colors(
                 unfocusedContainerColor = Color.Transparent,
-                focusedContainerColor =  Color.Transparent,
+                focusedContainerColor = Color.Transparent,
                 unfocusedIndicatorColor = Color.Transparent,
                 focusedIndicatorColor = Color.Transparent
             ),
@@ -108,69 +111,12 @@ private fun SetupRange(onRangeChanged: (Int) -> Unit, range: State<Int>) {
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
-            rangeList.forEach { range ->
+            rangeMap.forEach { range ->
                 DropdownMenuItem(
-                    text = { Text(text = range.toString()) },
+                    text = { Text(text = range.key) },
                     onClick = {
-                        selectedRange = range
-                        onRangeChanged(range)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SetupCity() {
-    var expanded by remember {
-        mutableStateOf(false)
-    }
-    val cityList = listOf(
-        "Taichung", "Hsinchu", "MiaoliCounty", "ChanghuaCounty", "NewTaipei",
-        "YunlinCounty", "ChiayiCounty", "PingtungCounty", "TaitungCounty", "Taoyuan", "Taipei",
-        "Kaohsiung", "Tainan", "Chiayi", "HsinchuCounty"
-    )
-
-    var selectedCity by remember {
-        mutableStateOf("NewTaipei")
-    }
-
-    Text(
-        text = "切換地區",
-        color = MaterialTheme.colorScheme.primary
-    )
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = !expanded }
-    ) {
-        TextField(
-            modifier = Modifier
-                .menuAnchor()
-                .fillMaxWidth(),
-            value = selectedCity,
-            onValueChange = {},
-            readOnly = true,
-            colors = TextFieldDefaults.colors(
-                unfocusedContainerColor = Color.Transparent,
-                focusedContainerColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                focusedIndicatorColor = Color.Transparent
-            )
-        )
-        ExposedDropdownMenu(
-            containerColor = Color.White,
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            cityList.forEach { city ->
-                DropdownMenuItem(
-                    text = { Text(text = city) },
-                    onClick = {
-                        selectedCity = city
+                        selectedRange = range.value
+                        onRangeChanged(range.value)
                         expanded = false
                     }
                 )

@@ -56,7 +56,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -69,13 +68,9 @@ import coil.compose.rememberAsyncImagePainter
 import com.google.accompanist.placeholder.PlaceholderHighlight
 import com.google.accompanist.placeholder.placeholder
 import com.google.accompanist.placeholder.shimmer
-import com.ymsu.bike_compose.data.AvailableInfoItem
-import com.ymsu.bike_compose.data.CompleteStationInfo
-import com.ymsu.bike_compose.data.FlaskItemWithFavorite
-import com.ymsu.bike_compose.data.StationAddress
-import com.ymsu.bike_compose.data.StationInfoFromFlaskItem
-import com.ymsu.bike_compose.data.StationInfoItem
-import com.ymsu.bike_compose.data.StationName
+import com.ymsu.bike_compose.data.ApiResult
+import com.ymsu.bike_compose.data.StationInfo
+import com.ymsu.bike_compose.data.StationInfoDetail
 import com.ymsu.bike_compose.theme.AppTheme
 import com.ymsu.bike_compose.theme.gray_100
 import com.ymsu.bike_compose.theme.gray_300
@@ -83,42 +78,46 @@ import kotlin.math.abs
 
 
 @Composable
-fun HomeScreen(viewModel: MainViewModel, navController:NavController) {
+fun HomeScreen(viewModel: MainViewModel, navController: NavController) {
     val allFavoriteStations by viewModel.allFavoriteStations.collectAsStateWithLifecycle()
     val nearByStations by viewModel.nearByStationWithFavorite.collectAsStateWithLifecycle()
-    ColumnScreen(allFavoriteStations, nearByStations,viewModel,navController)
+    ColumnScreen(allFavoriteStations, nearByStations, viewModel, navController)
 }
 
 @Composable
 private fun ColumnScreen(
-    allFavoriteStations: List<FlaskItemWithFavorite>,
-    nearByStations: List<FlaskItemWithFavorite>,
+    allFavoriteStations: ApiResult<List<StationInfo>>,
+    nearByStations: ApiResult<List<StationInfo>>,
     viewModel: MainViewModel,
     navController: NavController
 ) {
-    val onClick:(FlaskItemWithFavorite) -> Unit = { flaskItemWithFavorite ->
-        Log.d("","[onClick] station uid = "+flaskItemWithFavorite.stationInfoFromFlaskItem.station_uid)
+    val onClick: (StationInfo) -> Unit = { flaskItemWithFavorite ->
+        Log.d("", "[onClick] station uid = " + flaskItemWithFavorite.stationInfoDetail.station_uid)
         // navigate to map screen
         // call viewmodel function to set selected station
+        Log.d("HomeScreen", "allFavoriteStations call viewModel.setSelectedStation")
         viewModel.setSelectedStation(flaskItemWithFavorite)
         navController.navigate("Map")
     }
 
     HomeMainView(nearByStations, allFavoriteStations, onClick)
 
-    Box(modifier = Modifier.fillMaxWidth(),
-        contentAlignment = Alignment.Center) {
-        SearchBar(modifier = Modifier
-            .offset(y = 110.dp), viewModel = viewModel,navController
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        SearchBar(
+            modifier = Modifier
+                .offset(y = 110.dp), viewModel = viewModel, navController
         )
     }
 }
 
 @Composable
 private fun HomeMainView(
-    nearByStations: List<FlaskItemWithFavorite>,
-    allFavoriteStations: List<FlaskItemWithFavorite>,
-    onClick: (FlaskItemWithFavorite) -> Unit
+    nearByStations: ApiResult<List<StationInfo>>,
+    allFavoriteStations: ApiResult<List<StationInfo>>,
+    onClick: (StationInfo) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -153,7 +152,7 @@ private fun HomeMainView(
             style = MaterialTheme.typography.titleMedium,
         )
 
-        BikeStationList(stations = nearByStations,onClick)
+        BikeStationList(stations = nearByStations, onClick)
 
         Spacer(
             modifier = Modifier.height(16.dp)
@@ -166,7 +165,7 @@ private fun HomeMainView(
             style = MaterialTheme.typography.titleMedium,
         )
 
-        FavoriteStationList(stations = allFavoriteStations,onClick)
+        FavoriteStationList(stations = allFavoriteStations, onClick)
     }
 }
 
@@ -176,32 +175,31 @@ fun SearchBar(
     viewModel: MainViewModel,
     navController: NavController
 ) {
-
-
     val filterStations by viewModel.filterStations.collectAsState()
 
-    val onQueryChange: (String)->Unit = {query->
-        Log.d("","[onQueryChange] query = $query")
+    val onQueryChange: (String) -> Unit = { query ->
+        Log.d("", "[onQueryChange] query = $query")
         viewModel.queryStations(query)
     }
 
-    val onClick:(FlaskItemWithFavorite) -> Unit = { completeStationInfo ->
-        Log.d("","[onClick] station uid = "+completeStationInfo.stationInfoFromFlaskItem.station_uid)
+    val onClick: (StationInfo) -> Unit = { completeStationInfo ->
+        Log.d("", "[onClick] station uid = " + completeStationInfo.stationInfoDetail.station_uid)
         // navigate to map screen
         // call viewmodel function to set selected station
+        Log.d("HomeScreen", "SearchBar call viewModel.setSelectedStation")
         viewModel.setSelectedStation(completeStationInfo)
         navController.navigate("Map")
     }
 
-    SearchBarDetail(modifier, filterStations, onQueryChange,onClick)
+    SearchBarDetail(modifier, filterStations, onQueryChange, onClick)
 }
 
 @Composable
 private fun SearchBarDetail(
     modifier: Modifier,
-    filterStations: List<FlaskItemWithFavorite>,
+    filterStations: ApiResult<List<StationInfo>>,
     onQueryChange: (String) -> Unit,
-    onClick: (FlaskItemWithFavorite)->Unit
+    onClick: (StationInfo) -> Unit
 ) {
     var isExpanded by remember {
         mutableStateOf(false)
@@ -266,17 +264,54 @@ private fun SearchBarDetail(
                 elevation = CardDefaults.elevatedCardElevation(defaultElevation = 8.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
-                LazyColumn(
-                    modifier = Modifier
-                        .clip(shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
-                        .background(MaterialTheme.colorScheme.surface),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                when (filterStations) {
+                    is ApiResult.Success -> {
+                        if (filterStations.data.isEmpty()) {
+                            Text(
+                                modifier = Modifier.padding(16.dp),
+                                text = "無符合條件之站點",
+                                color = Color.Gray,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .clip(
+                                        shape = RoundedCornerShape(
+                                            bottomStart = 16.dp,
+                                            bottomEnd = 16.dp
+                                        )
+                                    )
+                                    .background(MaterialTheme.colorScheme.surface),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
 
-                ) {
+                            ) {
 
-                    items(filterStations.size) { index ->
-                        // TODO: 這邊要設計成card + 利用viewmodel的all city list 列出相關的站名
-                        SearchStationCard(filterStations, index, onClick)
+                                items(filterStations.data.size) { index ->
+                                    // TODO: 這邊要設計成card + 利用viewmodel的all city list 列出相關的站名
+                                    SearchStationCard(filterStations.data, index, onClick)
+                                }
+                            }
+                        }
+                    }
+
+                    is ApiResult.Error -> {
+                        Log.d("","filterStations ERROR: ${filterStations.message}")
+                        Text(
+                            modifier = Modifier.padding(16.dp),
+                            text = "資料錯誤，請稍後再試",
+                            color = Color.Gray,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+
+                    is ApiResult.Loading -> {
+                        Text(
+                            modifier = Modifier.padding(16.dp),
+                            text = "載入中...",
+                            color = Color.Gray,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
                 }
             }
@@ -286,9 +321,9 @@ private fun SearchBarDetail(
 
 @Composable
 private fun SearchStationCard(
-    filterStations: List<FlaskItemWithFavorite>,
+    filterStations: List<StationInfo>,
     index: Int,
-    onClick: (FlaskItemWithFavorite) -> Unit
+    onClick: (StationInfo) -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -308,7 +343,7 @@ private fun SearchStationCard(
                 Row {
                     Text(
                         modifier = Modifier.weight(1.5f),
-                        text = filterStations[index].stationInfoFromFlaskItem.station_name.substringAfter(
+                        text = filterStations[index].stationInfoDetail.station_name.substringAfter(
                             "_"
                         ),
                         style = MaterialTheme.typography.titleMedium,
@@ -331,7 +366,7 @@ private fun SearchStationCard(
                     )
                 }
 
-                Row{
+                Row {
                     Row(modifier = Modifier.weight(0.3f)) {
                         Icon(
                             modifier = Modifier
@@ -345,7 +380,7 @@ private fun SearchStationCard(
                         )
                         Text(
                             modifier = Modifier.padding(start = 4.dp),
-                            text = filterStations[index].stationInfoFromFlaskItem.available_bikes.toString(),
+                            text = filterStations[index].stationInfoDetail.available_bikes.toString(),
                             style = MaterialTheme.typography.titleMedium
                         )
                     }
@@ -363,7 +398,7 @@ private fun SearchStationCard(
                         )
                         Text(
                             modifier = Modifier.padding(start = 4.dp),
-                            text = filterStations[index].stationInfoFromFlaskItem.available_e_bikes.toString(),
+                            text = filterStations[index].stationInfoDetail.available_e_bikes.toString(),
                             style = MaterialTheme.typography.titleMedium
                         )
                     }
@@ -381,7 +416,7 @@ private fun SearchStationCard(
                         )
                         Text(
                             modifier = Modifier.padding(start = 4.dp),
-                            text = filterStations[index].stationInfoFromFlaskItem.available_return.toString(),
+                            text = filterStations[index].stationInfoDetail.available_return.toString(),
                             style = MaterialTheme.typography.titleMedium
                         )
                     }
@@ -391,7 +426,7 @@ private fun SearchStationCard(
                             .weight(1f)
                             .heightIn(min = 20.dp, max = 50.dp)
                             .align(Alignment.Bottom),
-                        text = filterStations[index].stationInfoFromFlaskItem.station_address,
+                        text = filterStations[index].stationInfoDetail.station_address,
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Right,
                         maxLines = 1
@@ -403,27 +438,24 @@ private fun SearchStationCard(
 }
 
 @Composable
-fun FavoriteStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskItemWithFavorite) -> Unit) {
+fun FavoriteStationList(stations: ApiResult<List<StationInfo>>, onClick: (StationInfo) -> Unit) {
     val lazyListState = rememberLazyListState()
-    var isLoading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(key1 = stations) {
-        isLoading = stations.isEmpty()
-    }
+    val isLoading = stations is ApiResult.Loading
+    val isError = stations is ApiResult.Error
+    val data = (stations as? ApiResult.Success)?.data ?: emptyList()
+    Log.d("","[FavoriteStationList] isLoading : $isLoading, isError : $isError")
 
     LazyRow(
         state = lazyListState,
         modifier = Modifier
             .fillMaxWidth()
+            .height(280.dp)
             .padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-
-        itemsIndexed(if (isLoading) List(2) {
-            FlaskItemWithFavorite(
-                StationInfoFromFlaskItem()
-            )
-        } else stations) { index, station ->
+        // 顯示 loading 項目，或正常顯示資料
+        itemsIndexed(if (isLoading) List(2) { StationInfo(StationInfoDetail()) } else data) { index, station ->
             val layoutInfo = lazyListState.layoutInfo
             val viewportCenter =
                 (layoutInfo.viewportEndOffset + layoutInfo.viewportStartOffset) / 2f
@@ -440,13 +472,12 @@ fun FavoriteStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskIt
                 targetValue = scale.value,
                 animationSpec = tween(durationMillis = 100)
             )
+
             Box {
                 Card(
                     elevation = CardDefaults.elevatedCardElevation(defaultElevation = 8.dp),
                     modifier = Modifier
-                        .clickable {
-                            onClick(stations[index])
-                        }
+                        .clickable { onClick(data[index]) }
                         .size(width = 200.dp, height = 250.dp)
                         .padding(horizontal = 8.dp)
                         .graphicsLayer {
@@ -456,7 +487,7 @@ fun FavoriteStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskIt
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Image(
-                            painter =  rememberAsyncImagePainter(station.stationInfoFromFlaskItem.image_url),
+                            painter = rememberAsyncImagePainter(station.stationInfoDetail.image_url),
                             contentDescription = "",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
@@ -478,9 +509,7 @@ fun FavoriteStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskIt
                                     color = gray_300,
                                     highlight = PlaceholderHighlight.shimmer(highlightColor = gray_100)
                                 ),
-                            text = if (isLoading) "Loading..." else station.stationInfoFromFlaskItem.station_name.substringAfter(
-                                "_"
-                            ),
+                            text = if (isLoading) "Loading..." else station.stationInfoDetail.station_name.substringAfter("_"),
                             color = Color.DarkGray,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -498,41 +527,38 @@ fun FavoriteStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskIt
                             color = Color.DarkGray,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            text = if (isLoading) "Loading..." else station.stationInfoFromFlaskItem.station_address
+                            text = if (isLoading) "Loading..." else station.stationInfoDetail.station_address
                         )
-                        station.let {
-                            Text(
-                                modifier = Modifier
-                                    .padding(start = 8.dp, bottom = 8.dp, end = 8.dp)
-                                    .placeholder(
-                                        visible = isLoading,
-                                        color = gray_300,
-                                        highlight = PlaceholderHighlight.shimmer(highlightColor = gray_100)
-                                    ),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.DarkGray,
-                                text = if (isLoading) "Loading..." else "可借${it.stationInfoFromFlaskItem.available_bikes+it.stationInfoFromFlaskItem.available_e_bikes}" +
-                                        "  /  可還: ${it.stationInfoFromFlaskItem.available_return}"
-                            )
-                            val distanceString = if (station.distance > 1000) {
-                                "%.2f".format(station.distance / 1000).toString() + "公里"
-                            } else {
-                                station.distance.toInt().toString() + "公尺"
-                            }
-
-                            Text(
-                                modifier = Modifier
-                                    .padding(start = 8.dp, bottom = 8.dp, end = 8.dp)
-                                    .placeholder(
-                                        visible = isLoading,
-                                        color = gray_300,
-                                        highlight = PlaceholderHighlight.shimmer(highlightColor = gray_100)
-                                    ),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.DarkGray,
-                                text = if (isLoading) "Loading..." else distanceString
-                            )
+                        Text(
+                            modifier = Modifier
+                                .padding(start = 8.dp, bottom = 8.dp, end = 8.dp)
+                                .placeholder(
+                                    visible = isLoading,
+                                    color = gray_300,
+                                    highlight = PlaceholderHighlight.shimmer(highlightColor = gray_100)
+                                ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.DarkGray,
+                            text = if (isLoading) "Loading..." else "可借${station.stationInfoDetail.available_bikes + station.stationInfoDetail.available_e_bikes} / 可還: ${station.stationInfoDetail.available_return}"
+                        )
+                        val distanceString = if (station.distance > 1000) {
+                            "%.2f".format(station.distance / 1000).toString() + "公里"
+                        } else {
+                            station.distance.toInt().toString() + "公尺"
                         }
+
+                        Text(
+                            modifier = Modifier
+                                .padding(start = 8.dp, bottom = 8.dp, end = 8.dp)
+                                .placeholder(
+                                    visible = isLoading,
+                                    color = gray_300,
+                                    highlight = PlaceholderHighlight.shimmer(highlightColor = gray_100)
+                                ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.DarkGray,
+                            text = if (isLoading) "Loading..." else distanceString
+                        )
                     }
                 }
 
@@ -547,29 +573,63 @@ fun FavoriteStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskIt
                 )
             }
         }
+
+        if (isError) {
+            item {
+                Box(
+                    modifier = Modifier.fillParentMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "載入失敗，請稍後再試。",
+                        color = Color.Gray,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+
+        if (data.isEmpty() && !isError && !isLoading) {
+            item {
+                Box(
+                    modifier = Modifier.fillParentMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "無收藏站點",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray,
+                    )
+                }
+            }
+        }
     }
 }
 
-@Composable
-fun BikeStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskItemWithFavorite) -> Unit) {
-    val lazyListState = rememberLazyListState()
-    var isLoading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(key1 = stations) {
-        isLoading = stations.isEmpty()
-    }
+@Composable
+fun BikeStationList(stations: ApiResult<List<StationInfo>>, onClick: (StationInfo) -> Unit) {
+    val lazyListState = rememberLazyListState()
+
+    // 判斷 loading 狀態
+    val isLoading = stations is ApiResult.Loading
+    val isError = stations is ApiResult.Error
+    val data = (stations as? ApiResult.Success)?.data ?: emptyList()
 
     LazyRow(
         state = lazyListState,
         modifier = Modifier
             .fillMaxWidth()
+            .height(280.dp)
             .padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-
         itemsIndexed(
-            if (isLoading) List(2) { FlaskItemWithFavorite(StationInfoFromFlaskItem())
-        } else stations) { index, station ->
+            if (isLoading)
+                List(2) { StationInfo(StationInfoDetail()) }
+            else
+                data
+        ) { index, station ->
             val layoutInfo = lazyListState.layoutInfo
             val viewportCenter =
                 (layoutInfo.viewportEndOffset + layoutInfo.viewportStartOffset) / 2f
@@ -591,7 +651,7 @@ fun BikeStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskItemWi
                 elevation = CardDefaults.elevatedCardElevation(defaultElevation = 8.dp),
                 modifier = Modifier
                     .clickable {
-                        onClick(stations[index])
+                        onClick(data[index])
                     }
                     .size(width = 200.dp, height = 250.dp)
                     .padding(horizontal = 8.dp)
@@ -602,7 +662,7 @@ fun BikeStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskItemWi
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Image(
-                        painter =  rememberAsyncImagePainter(station.stationInfoFromFlaskItem.image_url),
+                        painter = rememberAsyncImagePainter(station.stationInfoDetail.image_url),
                         contentDescription = "",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
@@ -624,7 +684,7 @@ fun BikeStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskItemWi
                                 color = gray_300,
                                 highlight = PlaceholderHighlight.shimmer(highlightColor = gray_100)
                             ),
-                        text = if (isLoading) "Loading..." else station.stationInfoFromFlaskItem.station_name.substringAfter(
+                        text = if (isLoading) "Loading..." else station.stationInfoDetail.station_name.substringAfter(
                             "_"
                         ),
                         color = Color.DarkGray,
@@ -644,7 +704,7 @@ fun BikeStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskItemWi
                         color = Color.DarkGray,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        text = if (isLoading) "Loading..." else station.stationInfoFromFlaskItem.station_address
+                        text = if (isLoading) "Loading..." else station.stationInfoDetail.station_address
                     )
                     station.let {
                         Text(
@@ -657,8 +717,8 @@ fun BikeStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskItemWi
                                 ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.DarkGray,
-                            text = if (isLoading) "Loading..." else "可借${it.stationInfoFromFlaskItem.available_bikes+it.stationInfoFromFlaskItem.available_e_bikes}  " +
-                                    "/  可還: ${it.stationInfoFromFlaskItem.available_return}"
+                            text = if (isLoading) "Loading..." else "可借${it.stationInfoDetail.available_bikes + it.stationInfoDetail.available_e_bikes}  " +
+                                    "/  可還: ${it.stationInfoDetail.available_return}"
                         )
                         val distanceString = if (station.distance > 1000) {
                             "%.2f".format(station.distance / 1000).toString() + "公里"
@@ -682,27 +742,39 @@ fun BikeStationList(stations: List<FlaskItemWithFavorite>, onClick: (FlaskItemWi
                 }
             }
         }
+        if (isError) {
+            item {
+                Box(modifier = Modifier.fillParentMaxSize(),
+                    contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "載入失敗，請稍後再試",
+                        color = Color.Gray,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
     }
 }
 
 @Preview(showBackground = true)
 @Composable
-fun PreviewSearchStationCard(){
-    val list = mutableListOf<CompleteStationInfo>()
+fun PreviewSearchStationCard() {
+    val list = mutableListOf<StationInfo>()
     list.add(
-        CompleteStationInfo(
-            StationInfoItem(
-                StationName = StationName(Zh_tw = "YouBike2.0_幸福路753巷口"),
-                StationAddress = StationAddress(Zh_tw = "幸福路738號(前)")
-            ), AvailableInfoItem(), true, 100.0f
+        StationInfo(
+            StationInfoDetail(
+                station_name = "YouBike2.0_幸福路753巷口",
+                station_address = "幸福路738號(前)"
+            ), true, 100.0f
         )
     )
     list.add(
-        CompleteStationInfo(
-            StationInfoItem(
-                StationName = StationName(Zh_tw = "YouBike2.0_幸福路753巷口"),
-                StationAddress = StationAddress(Zh_tw = "幸福路738號(前)")
-            ), AvailableInfoItem(), true, 100.0f
+        StationInfo(
+            StationInfoDetail(
+                station_name = "YouBike2.0_幸福路753巷口",
+                station_address = "幸福路738號(前)"
+            ), true, 100.0f
         )
     )
 
@@ -713,11 +785,11 @@ fun PreviewSearchStationCard(){
 
 @Preview(showBackground = true)
 @Composable
-fun PreviewSearchBarDetails(){
-    val list = mutableListOf<FlaskItemWithFavorite>()
+fun PreviewSearchBarDetails() {
+    val list = mutableListOf<StationInfo>()
     list.add(
-        FlaskItemWithFavorite(
-            StationInfoFromFlaskItem(
+        StationInfo(
+            StationInfoDetail(
                 station_name = "測試用站名",
                 station_address = "測試用地址測試用地址測試用地址測試用地址"
             ), true, 1f
@@ -725,8 +797,8 @@ fun PreviewSearchBarDetails(){
     )
 
     list.add(
-        FlaskItemWithFavorite(
-            StationInfoFromFlaskItem(
+        StationInfo(
+            StationInfoDetail(
                 station_name = "測試用站名",
                 station_address = "測試用地址測試用地址測試用地址測試用地址"
             ), true, 1f
@@ -734,28 +806,33 @@ fun PreviewSearchBarDetails(){
     )
 
     list.add(
-        FlaskItemWithFavorite(
-            StationInfoFromFlaskItem(
+        StationInfo(
+            StationInfoDetail(
                 station_name = "測試用站名",
                 station_address = "測試用地址測試用地址測試用地址測試用地址"
             ), true, 1f
         )
     )
+
+    val result = ApiResult.Success(list)
 
     AppTheme {
-        SearchBarDetail(modifier = Modifier, filterStations = list.toList(), onQueryChange = {
-                query ->
-            }, onClick = {completeStationInfo ->  })
+        SearchBarDetail(
+            modifier = Modifier,
+            filterStations = result,
+            onQueryChange = { query ->
+            },
+            onClick = { completeStationInfo -> })
     }
 }
 
 @Preview(showBackground = true)
 @Composable
 fun PreviewHomeMainView() {
-    val list = mutableListOf<FlaskItemWithFavorite>()
+    val list = mutableListOf<StationInfo>()
     list.add(
-        FlaskItemWithFavorite(
-            StationInfoFromFlaskItem(
+        StationInfo(
+            StationInfoDetail(
                 station_name = "測試用站名",
                 station_address = "測試用地址測試用地址測試用地址測試用地址"
             ), true, 1f
@@ -763,8 +840,8 @@ fun PreviewHomeMainView() {
     )
 
     list.add(
-        FlaskItemWithFavorite(
-            StationInfoFromFlaskItem(
+        StationInfo(
+            StationInfoDetail(
                 station_name = "測試用站名",
                 station_address = "測試用地址測試用地址測試用地址測試用地址"
             ), true, 1f
@@ -772,15 +849,20 @@ fun PreviewHomeMainView() {
     )
 
     list.add(
-        FlaskItemWithFavorite(
-            StationInfoFromFlaskItem(
+        StationInfo(
+            StationInfoDetail(
                 station_name = "測試用站名",
                 station_address = "測試用地址測試用地址測試用地址測試用地址"
             ), true, 1f
         )
     )
+
+    val result = ApiResult.Success(list)
 
     AppTheme {
-        HomeMainView(allFavoriteStations = list, nearByStations = list, onClick = {})
+        HomeMainView(
+            allFavoriteStations = ApiResult.Success(emptyList()),
+            nearByStations = ApiResult.Error(""), onClick = {}
+        )
     }
 }

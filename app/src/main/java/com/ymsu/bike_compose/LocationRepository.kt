@@ -15,13 +15,17 @@ import javax.inject.Singleton
 
 @Singleton
 class LocationRepository @Inject constructor(@ApplicationContext val context: Context) {
-    private val fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(context)
+    private val fusedLocationProviderClient =
+        LocationServices.getFusedLocationProviderClient(context)
     private val _currentLocation = MutableStateFlow<Location?>(null)
-    val currentLocation:StateFlow<Location?> = _currentLocation
+    val currentLocation: StateFlow<Location?> = _currentLocation
 
 
-    fun startRequestLocation(){
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+    fun startRequestLocation() {
+        if (ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
                 context,
                 Manifest.permission.ACCESS_COARSE_LOCATION
             ) != PackageManager.PERMISSION_GRANTED
@@ -36,9 +40,12 @@ class LocationRepository @Inject constructor(@ApplicationContext val context: Co
             return
         }
 
-        fusedLocationProviderClient.lastLocation.addOnSuccessListener { location : Location? ->
+        fusedLocationProviderClient.lastLocation.addOnSuccessListener { location: Location? ->
             if (location != null) {
-                Log.d("[LocationRepository]","[get lastLocation] = location : ${location?.latitude} , ${location?.longitude}")
+                Log.d(
+                    "[LocationRepository]",
+                    "[get lastLocation] = location : ${location?.latitude} , ${location?.longitude}"
+                )
                 _currentLocation.value = location
             }
         }

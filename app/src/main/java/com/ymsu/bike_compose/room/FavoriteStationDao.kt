@@ -1,7 +1,6 @@
 package com.ymsu.bike_compose.room
 
 import androidx.room.Dao
-import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -19,5 +18,5 @@ interface FavoriteStationDao {
     suspend fun removeFavorite(id: String)
 
     @Query("SELECT * FROM favoriteStation")
-    fun getAll(): Flow<List<FavoriteStation>>
+    fun getFavoriteList(): Flow<List<FavoriteStation>>
 }

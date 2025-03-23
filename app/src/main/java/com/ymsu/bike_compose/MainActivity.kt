@@ -149,11 +149,13 @@ class MainActivity : ComponentActivity() {
         if (isPermissionGranted) {
             BikeComposeApp(hasNetwork, onRetry)
         } else {
-            Box(modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.5f))
-                .clickable(enabled = false) { },
-                contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .clickable(enabled = false) { },
+                contentAlignment = Alignment.Center
+            ) {
                 Text("Need granted location permissions!")
             }
         }
@@ -189,7 +191,7 @@ fun BikeComposeApp(hasNetwork: LiveData<Boolean>, onRetry: () -> Unit) {
                 modifier = Modifier.padding(paddingValues)
             ) {
                 composable("Map") { MapScreen(viewModel) }
-                composable("Home") { HomeScreen(viewModel,navController) }
+                composable("Home") { HomeScreen(viewModel, navController) }
                 composable("Settings") { SettingsScreen(viewModel) }
             }
 
@@ -206,7 +208,7 @@ fun BikeComposeApp(hasNetwork: LiveData<Boolean>, onRetry: () -> Unit) {
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "No network connected! Please turn on network",
+                            text = "請檢查網路連線",
                             color = Color.White,
                             fontSize = 16.sp
                         )
@@ -215,7 +217,7 @@ fun BikeComposeApp(hasNetwork: LiveData<Boolean>, onRetry: () -> Unit) {
                             onClick = { onRetry() },
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
-                            Text(text = "Retry")
+                            Text(text = "重新整理")
                         }
                     }
                 }

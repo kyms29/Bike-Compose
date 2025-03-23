@@ -2,8 +2,9 @@ package com.ymsu.bike_compose.di
 
 import android.app.Application
 import com.ymsu.bike_compose.room.AppDatabase
-import com.ymsu.bike_compose.room.FavoriteRepository
+import com.ymsu.bike_compose.room.RoomRepository
 import com.ymsu.bike_compose.room.FavoriteStationDao
+import com.ymsu.bike_compose.room.SettingsDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -22,13 +23,20 @@ object Module {
 
     @Provides
     @Singleton
-    fun provideDao(appDatabase: AppDatabase): FavoriteStationDao {
+    fun provideFavoriteDao(appDatabase: AppDatabase): FavoriteStationDao {
         return appDatabase.favoriteStationDao()
     }
 
     @Provides
     @Singleton
-    fun provideFavoriteRepository(favoriteStationDao: FavoriteStationDao):FavoriteRepository{
-        return FavoriteRepository(favoriteStationDao)
+    fun provideSettingsDao(appDatabase: AppDatabase): SettingsDao {
+        return appDatabase.settingsDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideFavoriteRepository(favoriteStationDao: FavoriteStationDao,
+                                  settingsDao: SettingsDao):RoomRepository{
+        return RoomRepository(favoriteStationDao,settingsDao)
     }
 }

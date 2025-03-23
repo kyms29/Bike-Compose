@@ -70,16 +70,11 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
-import com.ymsu.bike_compose.data.AvailableInfoItem
-import com.ymsu.bike_compose.data.CompleteStationInfo
-import com.ymsu.bike_compose.data.FlaskItemWithFavorite
-import com.ymsu.bike_compose.data.StationAddress
-import com.ymsu.bike_compose.data.StationInfoFromFlaskItem
-import com.ymsu.bike_compose.data.StationInfoItem
-import com.ymsu.bike_compose.data.StationName
+import com.ymsu.bike_compose.data.ApiResult
+import com.ymsu.bike_compose.data.StationInfo
+import com.ymsu.bike_compose.data.StationInfoDetail
 import com.ymsu.bike_compose.theme.AppTheme
 import com.ymsu.bike_compose.theme.orange
-import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Calendar
 
@@ -93,18 +88,19 @@ fun MapScreen(viewModel: MainViewModel) {
             .padding(16.dp)
     ) {
         val currentLatLng by viewModel.currentLatLng.collectAsStateWithLifecycle()
+        val realUserLatLng by viewModel.realUserLatLng.collectAsStateWithLifecycle()
 
         val cameraPositionState = rememberCameraPositionState {
-            position = CameraPosition.fromLatLngZoom(currentLatLng, 12f)
+            position = CameraPosition.fromLatLngZoom(currentLatLng, 16f)
         }
 
         val context = LocalContext.current
 
         var showStationInfo by remember { mutableStateOf(false) }
-        var selectedMarkerStationInfo by remember {
+        var selectedMarkerStationInfoDetail by remember {
             mutableStateOf(
-                FlaskItemWithFavorite(
-                    StationInfoFromFlaskItem()
+                StationInfo(
+                    StationInfoDetail()
                 )
             )
         }
@@ -114,46 +110,43 @@ fun MapScreen(viewModel: MainViewModel) {
         val nearByStationInfos by viewModel.nearByStationWithFavorite.collectAsStateWithLifecycle()
         val selectedStationFromHomeScreen by viewModel.selectedStation.collectAsStateWithLifecycle()
 
+        var isUserMovingMap by remember { mutableStateOf(false) }
 
         LaunchedEffect(currentLatLng) {
-            if (selectedStationFromHomeScreen == null) {
-                Log.d(TAG,"[MapScreen] currentLatLng is changed")
+            Log.d(TAG,"[LaunchedEffect] currentLatLng")
+            if (!isUserMovingMap) {
+                val zoomLevel = cameraPositionState.position.zoom
                 cameraPositionState.animate(
                     // use animate seems can avoid map not ready issue...?
-                    CameraUpdateFactory.newLatLngZoom(currentLatLng, 16f)
+                    CameraUpdateFactory.newLatLngZoom(currentLatLng, zoomLevel)
                 )
+            }
+        }
+
+        LaunchedEffect(selectedStationFromHomeScreen) {
+            if (selectedStationFromHomeScreen != null) {
+                val selectedLatLng = LatLng(
+                    selectedStationFromHomeScreen!!.stationInfoDetail.lat,
+                    selectedStationFromHomeScreen!!.stationInfoDetail.lng
+                )
+
+                selectedMarker = selectedLatLng
+                markerSizes[selectedLatLng] = 1.3f
+                showStationInfo = true
+                selectedMarkerStationInfoDetail = selectedStationFromHomeScreen!!
+                viewModel.setSelectedStation(null)
             }
         }
 
         LaunchedEffect(cameraPositionState.isMoving) {
             if (!cameraPositionState.isMoving) {
-                if (selectedStationFromHomeScreen != null) {
-                    Log.d(TAG,"cameraPositionState delay 600")
-                    delay(600)
-                    viewModel.setSelectedStation(null)
-                }
-
-
                 val position = cameraPositionState.position.target
                 Log.d(TAG, "cameraPositionState change to: ${position.latitude}, ${position.longitude}")
-                Log.d(TAG,"[LaunchedEffect(cameraPositionState.isMoving)] called fetchNearByStationInfo")
-                viewModel.setUpMapLocation(position.latitude,position.longitude)
-            }
-        }
-
-
-        LaunchedEffect(key1 = selectedStationFromHomeScreen) {
-            selectedStationFromHomeScreen?.let { it
-                val selectedLatLng = LatLng(it.stationInfoFromFlaskItem.lat,
-                    it.stationInfoFromFlaskItem.lng)
-                cameraPositionState.animate(
-                    // use animate seems can avoid map not ready issue...?
-                    CameraUpdateFactory.newLatLngZoom(selectedLatLng, 16f)
-                )
-                selectedMarker = selectedLatLng
-                markerSizes[selectedLatLng] = 1.3f
-                showStationInfo = true
-                selectedMarkerStationInfo = it
+                Log.d(TAG, "[LaunchedEffect(cameraPositionState.isMoving)] called fetchNearByStationInfo")
+                viewModel.updateCurrentLatLng(position.latitude, position.longitude)
+                isUserMovingMap = false
+            } else {
+                isUserMovingMap = true
             }
         }
 
@@ -164,7 +157,8 @@ fun MapScreen(viewModel: MainViewModel) {
                 cameraPositionState = cameraPositionState,
                 uiSettings = MapUiSettings(
                     myLocationButtonEnabled = false,
-                    zoomControlsEnabled = false
+                    zoomControlsEnabled = false,
+                    zoomGesturesEnabled = true
                 ),
                 properties = MapProperties(isMyLocationEnabled = true)
             ) {
@@ -178,39 +172,51 @@ fun MapScreen(viewModel: MainViewModel) {
                     radius = 1000.0
                 )
 
-                Log.d(TAG,"[MapScreen] nearByStationInfos size = "+nearByStationInfos.size)
+                when(nearByStationInfos) {
+                    is ApiResult.Success -> {
+                        Log.d(TAG, "[MapScreen] nearByStationInfos size = " + (nearByStationInfos as ApiResult.Success<List<StationInfo>>).data.size)
 
-                nearByStationInfos.forEach { (stationInfo, isFavorite, distance) ->
+                        (nearByStationInfos as ApiResult.Success<List<StationInfo>>).data.forEach { (stationInfo, isFavorite, distance) ->
 //                    Log.d(TAG, "Drawing marker for station: ${stationInfo.StationName.Zh_tw}")
 
-                    val icon = getRateIcon(
-                        stationInfo.available_bikes+stationInfo.available_e_bikes,
-                        stationInfo.available_return
-                    )
-                    val markerPosition = LatLng(
-                        stationInfo.lat,
-                        stationInfo.lng
-                    )
-                    val markerSize = markerSizes[markerPosition] ?: 1f
-                    Marker(
-                        state = MarkerState(
-                            position = markerPosition
-                        ),
-                        title = stationInfo.station_name,
-                        onClick = {
-                            selectedMarker = markerPosition
-                            markerSizes[markerPosition] = 1.3f
-                            showStationInfo = true
-                            selectedMarkerStationInfo =
-                                FlaskItemWithFavorite(stationInfo,isFavorite,distance)
-                            true
-                        },
-                        icon = vectorToBitmapDescriptor(
-                            vectorResId = icon,
-                            context = LocalContext.current,
-                            markerSize
-                        )
-                    )
+                            val icon = getRateIcon(
+                                stationInfo.available_bikes + stationInfo.available_e_bikes,
+                                stationInfo.available_return
+                            )
+                            val markerPosition = LatLng(
+                                stationInfo.lat,
+                                stationInfo.lng
+                            )
+                            val markerSize = markerSizes[markerPosition] ?: 1f
+                            Marker(
+                                state = MarkerState(
+                                    position = markerPosition
+                                ),
+                                title = stationInfo.station_name,
+                                onClick = {
+                                    selectedMarker = markerPosition
+                                    markerSizes[markerPosition] = 1.3f
+                                    showStationInfo = true
+                                    selectedMarkerStationInfoDetail =
+                                        StationInfo(stationInfo, isFavorite, distance)
+                                    true
+                                },
+                                icon = vectorToBitmapDescriptor(
+                                    vectorResId = icon,
+                                    context = LocalContext.current,
+                                    markerSize
+                                )
+                            )
+                        }
+                    }
+
+                    is ApiResult.Loading -> {
+
+                    }
+
+                    is ApiResult.Error -> {
+                        Log.d(TAG,"[MapScreen] [nearByStation] error : ${(nearByStationInfos as ApiResult.Error).message}")
+                    }
                 }
             }
 
@@ -220,26 +226,26 @@ fun MapScreen(viewModel: MainViewModel) {
                     latitude = currentLatLng.latitude
                     longitude = currentLatLng.longitude
                 }
-                BottomSheetDialog(currentLocation, selectedMarkerStationInfo,
+                BottomSheetDialog(currentLocation, selectedMarkerStationInfoDetail,
                     onDismiss = {
                         showStationInfo = false
                         selectedMarker?.let { markerSizes[it] = 1f }
                         selectedMarker = null
                     },
                     onFavoriteClick = {
-                        viewModel.clickFavorite(selectedMarkerStationInfo.stationInfoFromFlaskItem.station_uid)
+                        viewModel.clickFavorite(selectedMarkerStationInfoDetail.stationInfoDetail.station_uid)
                     },
                     onShareClick = {
                         val sendIntent: Intent = Intent().apply {
                             val mapUri =
-                                "https://www.google.com/maps/dir/?api=1&destination=" + selectedMarkerStationInfo.stationInfoFromFlaskItem.lat + ","
-                            +selectedMarkerStationInfo.stationInfoFromFlaskItem.lng
+                                "https://www.google.com/maps/dir/?api=1&destination=" + selectedMarkerStationInfoDetail.stationInfoDetail.lat + ","
+                            +selectedMarkerStationInfoDetail.stationInfoDetail.lng
                             action = Intent.ACTION_SEND
                             putExtra(
                                 Intent.EXTRA_TEXT,
-                                selectedMarkerStationInfo.stationInfoFromFlaskItem.station_name + "有" +
-                                        (selectedMarkerStationInfo.stationInfoFromFlaskItem.available_bikes + selectedMarkerStationInfo.stationInfoFromFlaskItem.available_e_bikes).toString()+ "可借" +
-                                        selectedMarkerStationInfo.stationInfoFromFlaskItem.available_return.toString() + "可還"
+                                selectedMarkerStationInfoDetail.stationInfoDetail.station_name + "有" +
+                                        (selectedMarkerStationInfoDetail.stationInfoDetail.available_bikes + selectedMarkerStationInfoDetail.stationInfoDetail.available_e_bikes).toString() + "可借" +
+                                        selectedMarkerStationInfoDetail.stationInfoDetail.available_return.toString() + "可還"
                                         + "，地點在$mapUri"
                             )
                             type = "text/plain"
@@ -253,7 +259,7 @@ fun MapScreen(viewModel: MainViewModel) {
                     },
                     onNavigateClick = {
                         val gmmIntentUri =
-                            Uri.parse("google.navigation:q=" + selectedMarkerStationInfo.stationInfoFromFlaskItem.lat + "," + selectedMarkerStationInfo.stationInfoFromFlaskItem.lng + "&mode=w")
+                            Uri.parse("google.navigation:q=" + selectedMarkerStationInfoDetail.stationInfoDetail.lat + "," + selectedMarkerStationInfoDetail.stationInfoDetail.lng + "&mode=w")
                         val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
                         mapIntent.setPackage("com.google.android.apps.maps")
                         context.startActivity(mapIntent)
@@ -265,7 +271,7 @@ fun MapScreen(viewModel: MainViewModel) {
                 onClick = {
                     cameraPositionState.move(
                         CameraUpdateFactory.newLatLngZoom(
-                            currentLatLng,
+                            realUserLatLng,
                             16f
                         )
                     )
@@ -284,8 +290,13 @@ fun MapScreen(viewModel: MainViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BottomSheetDialog(currentLocation: Location, completeStationInfo: FlaskItemWithFavorite,
-                              onDismiss: () -> Unit, onFavoriteClick: () -> Unit, onShareClick: () -> Unit, onNavigateClick: () -> Unit
+private fun BottomSheetDialog(
+    currentLocation: Location,
+    completeStationInfo: StationInfo,
+    onDismiss: () -> Unit,
+    onFavoriteClick: () -> Unit,
+    onShareClick: () -> Unit,
+    onNavigateClick: () -> Unit
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -295,96 +306,126 @@ private fun BottomSheetDialog(currentLocation: Location, completeStationInfo: Fl
         shape = RectangleShape,
         contentWindowInsets = { WindowInsets(0.dp) }
     ) {
-        DialogContent(completeStationInfo,currentLocation)
-        BottomRowContent(completeStationInfo,onFavoriteClick,onShareClick,onNavigateClick)
+        DialogContent(completeStationInfo, currentLocation)
+        BottomRowContent(completeStationInfo, onFavoriteClick, onShareClick, onNavigateClick)
     }
 }
 
 @Composable
-private fun DialogContent(completeStationInfo: FlaskItemWithFavorite, currentLocation: Location) {
+private fun DialogContent(completeStationInfo: StationInfo, currentLocation: Location) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(20.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            Box(modifier = Modifier.weight(1f) ) {
-                Box(modifier = Modifier
-                    .width(100.dp)
-                    .background(color = MaterialTheme.colorScheme.background, shape = RoundedCornerShape(8.dp))){
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                Box(
+                    modifier = Modifier
+                        .width(100.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.background,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                ) {
                     Text(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 20.dp, bottom = 20.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
-                        text = completeStationInfo.stationInfoFromFlaskItem.available_bikes.toString()+"可借"
+                        text = completeStationInfo.stationInfoDetail.available_bikes.toString() + "可借"
                     )
                 }
-                Icon(imageVector = Icons.Default.DirectionsBike, contentDescription = "Bike",
+                Icon(
+                    imageVector = Icons.Default.DirectionsBike, contentDescription = "Bike",
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .offset(x = 10.dp, y = (-10).dp)
-                        .background(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.background)
-                        .padding(2.dp))
+                        .background(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.background
+                        )
+                        .padding(2.dp)
+                )
             }
 
-            Box(modifier = Modifier.weight(1f) ) {
-                Box(modifier = Modifier
-                    .width(100.dp)
-                    .background(color = MaterialTheme.colorScheme.background, shape = RoundedCornerShape(8.dp))) {
+            Box(modifier = Modifier.weight(1f)) {
+                Box(
+                    modifier = Modifier
+                        .width(100.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.background,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                ) {
                     Text(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 20.dp, bottom = 20.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
-                        text = completeStationInfo.stationInfoFromFlaskItem.available_e_bikes.toString()+"可借"
+                        text = completeStationInfo.stationInfoDetail.available_e_bikes.toString() + "可借"
                     )
                 }
-                Icon(imageVector = Icons.Default.ElectricBolt, contentDescription = "Bike",
+                Icon(
+                    imageVector = Icons.Default.ElectricBolt, contentDescription = "Bike",
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .offset(x = 10.dp, y = (-10).dp)
-                        .background(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.background)
-                        .padding(2.dp))
+                        .background(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.background
+                        )
+                        .padding(2.dp)
+                )
             }
 
-            Box(modifier = Modifier.weight(1f) ) {
-                Row(modifier = Modifier
-                    .width(100.dp)
-                    .background(color = orange, shape = RoundedCornerShape(8.dp))) {
+            Box(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier
+                        .width(100.dp)
+                        .background(color = orange, shape = RoundedCornerShape(8.dp))
+                ) {
                     Text(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 20.dp, bottom = 20.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
-                        text = completeStationInfo.stationInfoFromFlaskItem.available_return.toString()+"可還"
+                        text = completeStationInfo.stationInfoDetail.available_return.toString() + "可還"
                     )
                 }
-                Icon(imageVector = Icons.Default.LocalParking, contentDescription = "Bike",
+                Icon(
+                    imageVector = Icons.Default.LocalParking, contentDescription = "Bike",
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .offset(x = 10.dp, y = (-10).dp)
                         .background(shape = RoundedCornerShape(16.dp), color = orange)
-                        .padding(2.dp))
+                        .padding(2.dp)
+                )
             }
         }
 
-        Row(modifier = Modifier
-            .fillMaxWidth()
-            .padding(end = 10.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(end = 10.dp)
+        ) {
 
             var currentTimeDate = Calendar.getInstance().time
             var diff =
-                (currentTimeDate.time - convertTime(completeStationInfo.stationInfoFromFlaskItem.update_time).time.time) / 1000
+                (currentTimeDate.time - convertTime(completeStationInfo.stationInfoDetail.update_time).time.time) / 1000
 
             Text(
                 modifier = Modifier
                     .padding(top = 20.dp)
                     .weight(1f),
-                text = diff.toInt().toString() + "秒前更新", color = MaterialTheme.colorScheme.surfaceVariant,
+                text = diff.toInt().toString() + "秒前更新",
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 fontSize = 12.sp
             )
 
@@ -407,22 +448,30 @@ private fun DialogContent(completeStationInfo: FlaskItemWithFavorite, currentLoc
         Text(
             modifier = Modifier.padding(top = 20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
-            text = completeStationInfo.stationInfoFromFlaskItem.station_name.substringAfter("_")
+            text = completeStationInfo.stationInfoDetail.station_name.substringAfter("_")
         )
         Text(
             modifier = Modifier.padding(top = 20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
-            text = completeStationInfo.stationInfoFromFlaskItem.station_address
+            text = completeStationInfo.stationInfoDetail.station_address
         )
     }
 }
 
 @Composable
-private fun BottomRowContent(completeStationInfo: FlaskItemWithFavorite, onFavoriteClick: () -> Unit, onShareClick: () -> Unit, onNavigateClick: () -> Unit) {
+private fun BottomRowContent(
+    completeStationInfo: StationInfo,
+    onFavoriteClick: () -> Unit,
+    onShareClick: () -> Unit,
+    onNavigateClick: () -> Unit
+) {
     var isFavorite by remember {
         mutableStateOf(completeStationInfo.isFavorite)
     }
-    Log.d(TAG,"[BottomRowContent] Create or recompose , isFavorite = ${completeStationInfo.isFavorite}")
+    Log.d(
+        TAG,
+        "[BottomRowContent] Create or recompose , isFavorite = ${completeStationInfo.isFavorite}"
+    )
 
     Row(
         modifier = Modifier
@@ -430,16 +479,21 @@ private fun BottomRowContent(completeStationInfo: FlaskItemWithFavorite, onFavor
             .background(MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Button(
-            onClick = { onFavoriteClick()
+            onClick = {
+                onFavoriteClick()
                 isFavorite = !isFavorite
-                      },
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column {
-                Icon(imageVector = Icons.Default.Favorite , contentDescription = "favorite", tint = if (isFavorite) Color.Red else Color.Unspecified)
+                Icon(
+                    imageVector = Icons.Default.Favorite,
+                    contentDescription = "favorite",
+                    tint = if (isFavorite) Color.Red else Color.Unspecified
+                )
                 Text(text = "收藏", color = MaterialTheme.colorScheme.secondary)
             }
         }
@@ -474,7 +528,7 @@ private fun BottomRowContent(completeStationInfo: FlaskItemWithFavorite, onFavor
 
 @Composable
 private fun getRateIcon(availableRent: Int = 0, availableReturn: Int = 0): Int {
-    return remember(availableRent,availableReturn) {
+    return remember(availableRent, availableReturn) {
         val availableRate =
             ((availableRent.toFloat() / (availableRent.toFloat() + availableReturn.toFloat())) * 100).toInt()
 
@@ -495,13 +549,18 @@ private fun getRateIcon(availableRent: Int = 0, availableReturn: Int = 0): Int {
 }
 
 @Composable
-fun vectorToBitmapDescriptor(vectorResId: Int, context: Context, scale: Float = 1f): BitmapDescriptor {
-    return remember(vectorResId, context, scale)  {
-        val vectorDrawable = ContextCompat.getDrawable(context, vectorResId) ?: return@remember BitmapDescriptorFactory.defaultMarker()
+fun vectorToBitmapDescriptor(
+    vectorResId: Int,
+    context: Context,
+    scale: Float = 1f
+): BitmapDescriptor {
+    return remember(vectorResId, context, scale) {
+        val vectorDrawable = ContextCompat.getDrawable(context, vectorResId)
+            ?: return@remember BitmapDescriptorFactory.defaultMarker()
 
         val bitmap = Bitmap.createBitmap(
-            (vectorDrawable.intrinsicWidth*scale).toInt(),
-            (vectorDrawable.intrinsicHeight*scale).toInt(),
+            (vectorDrawable.intrinsicWidth * scale).toInt(),
+            (vectorDrawable.intrinsicHeight * scale).toInt(),
             Bitmap.Config.ARGB_8888
         )
         val canvas = Canvas(bitmap)
@@ -545,9 +604,10 @@ fun PreviewBottomSheetDialog() {
     }
     AppTheme {
         Surface(color = MaterialTheme.colorScheme.onPrimaryContainer) {
-            DialogContent(currentLocation = currentLocation,
-                completeStationInfo = FlaskItemWithFavorite(
-                    StationInfoFromFlaskItem(station_address = "測試地址用", station_name = "測試站名用")
+            DialogContent(
+                currentLocation = currentLocation,
+                completeStationInfo = StationInfo(
+                    StationInfoDetail(station_address = "測試地址用", station_name = "測試站名用")
                 )
             )
         }
@@ -558,7 +618,11 @@ fun PreviewBottomSheetDialog() {
 @Composable
 fun PreviewBottomRowContent() {
     AppTheme {
-        BottomRowContent(completeStationInfo = FlaskItemWithFavorite(StationInfoFromFlaskItem()), onFavoriteClick = {}, onShareClick = {}, onNavigateClick = {})
+        BottomRowContent(
+            completeStationInfo = StationInfo(StationInfoDetail()),
+            onFavoriteClick = {},
+            onShareClick = {},
+            onNavigateClick = {})
     }
 }
 
