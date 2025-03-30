@@ -17,7 +17,7 @@ interface BikeApiService {
     ): List<StationInfoDetail>
 
     companion object {
-        private const val FLASK_URL = "https://192.168.50.70:5000/"
+        private const val FLASK_URL = "https://sudevapp.com/"
 
         fun create(): BikeApiService {
             return Retrofit

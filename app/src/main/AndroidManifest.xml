@@ -8,7 +8,6 @@
 
     <application
         android:name=".application.MyApplication"
-        android:networkSecurityConfig="@xml/network_config"
         android:usesCleartextTraffic="true"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
