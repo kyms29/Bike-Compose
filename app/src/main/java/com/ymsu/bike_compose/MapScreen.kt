@@ -90,8 +90,10 @@ fun MapScreen(viewModel: MainViewModel) {
         val currentLatLng by viewModel.currentLatLng.collectAsStateWithLifecycle()
         val realUserLatLng by viewModel.realUserLatLng.collectAsStateWithLifecycle()
 
+        var zoomLevel by remember { mutableStateOf(16f) }
+
         val cameraPositionState = rememberCameraPositionState {
-            position = CameraPosition.fromLatLngZoom(currentLatLng, 16f)
+            position = CameraPosition.fromLatLngZoom(currentLatLng, zoomLevel)
         }
 
         val context = LocalContext.current
@@ -110,17 +112,12 @@ fun MapScreen(viewModel: MainViewModel) {
         val nearByStationInfos by viewModel.nearByStationWithFavorite.collectAsStateWithLifecycle()
         val selectedStationFromHomeScreen by viewModel.selectedStation.collectAsStateWithLifecycle()
 
-        var isUserMovingMap by remember { mutableStateOf(false) }
-
         LaunchedEffect(currentLatLng) {
             Log.d(TAG,"[LaunchedEffect] currentLatLng")
-            if (!isUserMovingMap) {
-                val zoomLevel = cameraPositionState.position.zoom
-                cameraPositionState.animate(
-                    // use animate seems can avoid map not ready issue...?
-                    CameraUpdateFactory.newLatLngZoom(currentLatLng, zoomLevel)
-                )
-            }
+            cameraPositionState.animate(
+                // use animate seems can avoid map not ready issue...?
+                CameraUpdateFactory.newLatLngZoom(currentLatLng, zoomLevel)
+            )
         }
 
         LaunchedEffect(selectedStationFromHomeScreen) {
@@ -141,12 +138,9 @@ fun MapScreen(viewModel: MainViewModel) {
         LaunchedEffect(cameraPositionState.isMoving) {
             if (!cameraPositionState.isMoving) {
                 val position = cameraPositionState.position.target
-                Log.d(TAG, "cameraPositionState change to: ${position.latitude}, ${position.longitude}")
-                Log.d(TAG, "[LaunchedEffect(cameraPositionState.isMoving)] called fetchNearByStationInfo")
-                viewModel.updateCurrentLatLng(position.latitude, position.longitude)
-                isUserMovingMap = false
-            } else {
-                isUserMovingMap = true
+                Log.d(TAG, "cameraPositionState is moving to: ${position.latitude}, ${position.longitude}")
+            viewModel.updateCurrentLatLng(position.latitude, position.longitude)
+                zoomLevel = cameraPositionState.position.zoom
             }
         }
 
@@ -177,8 +171,6 @@ fun MapScreen(viewModel: MainViewModel) {
                         Log.d(TAG, "[MapScreen] nearByStationInfos size = " + (nearByStationInfos as ApiResult.Success<List<StationInfo>>).data.size)
 
                         (nearByStationInfos as ApiResult.Success<List<StationInfo>>).data.forEach { (stationInfo, isFavorite, distance) ->
-//                    Log.d(TAG, "Drawing marker for station: ${stationInfo.StationName.Zh_tw}")
-
                             val icon = getRateIcon(
                                 stationInfo.available_bikes + stationInfo.available_e_bikes,
                                 stationInfo.available_return
