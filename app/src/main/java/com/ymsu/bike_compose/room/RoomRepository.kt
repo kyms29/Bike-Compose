@@ -1,9 +1,12 @@
 package com.ymsu.bike_compose.room
 
 import android.util.Log
+import javax.inject.Inject
 
-class RoomRepository(private val favoriteStationDao: FavoriteStationDao,
-                     private val settingsDao: SettingsDao) {
+class RoomRepository @Inject constructor(
+    private val favoriteStationDao: FavoriteStationDao,
+    private val settingsDao: SettingsDao)
+{
     private val TAG = "[RoomRepository]"
 
     suspend fun toggleFavorite(stationUID: String) {

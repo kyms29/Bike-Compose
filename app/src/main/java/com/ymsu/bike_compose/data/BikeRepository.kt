@@ -2,8 +2,9 @@ package com.ymsu.bike_compose.data
 
 import okio.IOException
 import retrofit2.HttpException
+import javax.inject.Inject
 
-class BikeRepository(private val apiService: BikeApiService) {
+class BikeRepository @Inject constructor(private val apiService: BikeApiService) {
     suspend fun getAllStationFromFlask(): ApiResult<List<StationInfoDetail>> {
         return try {
             ApiResult.Success(apiService.getAllStationsFromFlask())

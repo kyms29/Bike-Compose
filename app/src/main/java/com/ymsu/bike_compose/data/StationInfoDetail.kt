@@ -1,5 +1,8 @@
 package com.ymsu.bike_compose.data
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class StationInfoDetail(
     val available_bikes: Int = 0,
     val available_e_bikes: Int = 0,

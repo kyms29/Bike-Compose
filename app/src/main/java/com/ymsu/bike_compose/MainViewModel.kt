@@ -5,10 +5,8 @@ import android.location.LocationManager
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.ymsu.bike_compose.data.ApiResult
-import com.ymsu.bike_compose.data.BikeApiService
 import com.ymsu.bike_compose.data.BikeRepository
 import com.ymsu.bike_compose.data.StationInfo
 import com.ymsu.bike_compose.data.StationInfoDetail
@@ -23,10 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -34,26 +29,19 @@ import javax.inject.Inject
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val roomRepository: RoomRepository,
-    private val locationRepository: LocationRepository
+    private val locationRepository: LocationRepository,
+    private val bikeRepository: BikeRepository
 ) : ViewModel() {
     private val TAG = "[MainViewModel]"
-    private val bikeService = BikeApiService.create()
-    private val repository = BikeRepository(bikeService)
+    private val initLatLng = LatLng(25.048874128990544, 121.513878757331) // Taipei station
 
-    // handle google map position
-    private var _currentLatLng = MutableStateFlow(LatLng(25.048874128990544, 121.513878757331))
-    val currentLatLng = _currentLatLng.asStateFlow()
+    // record google map position
+    private var _mapLatLng = MutableStateFlow(initLatLng)
+    val mapLatLng = _mapLatLng.asStateFlow()
 
-    // handle real position
-    private var _realUserLatLng = MutableStateFlow(LatLng(25.048874128990544, 121.513878757331))
-    val realUserLatLng = _realUserLatLng.asStateFlow()
-
-    // MapScreen map camera position
-    private val _mapCameraPosition = MutableStateFlow<CameraPosition?>(null)
-    val mapCameraPosition:StateFlow<CameraPosition?> = _mapCameraPosition.asStateFlow()
-
-    // map location
-    private var _mapLocation = LatLng(25.048874128990544, 121.513878757331)
+    // record user position
+    private var _userLatLng = MutableStateFlow(initLatLng)
+    val userLatLng = _userLatLng.asStateFlow()
 
     private val _favoriteStations = MutableStateFlow<Set<String>>(emptySet())
 
@@ -61,14 +49,86 @@ class MainViewModel @Inject constructor(
     private var allStationsJob: Job? = null
 
     private var _allStationFromFlask = MutableStateFlow<ApiResult<List<StationInfoDetail>>>(ApiResult.Loading)
-    private var _allStationWithFavorite = MutableStateFlow<ApiResult<List<StationInfo>>>(ApiResult.Loading)
 
     private var _nearByStationFromFlask = MutableStateFlow<ApiResult<List<StationInfoDetail>>>(ApiResult.Loading)
-    private var _nearByStationWithFavorite = MutableStateFlow<ApiResult<List<StationInfo>>>(ApiResult.Loading)
-    val nearByStationWithFavorite = _nearByStationWithFavorite.asStateFlow()
 
-    private var _allFavoriteStations = MutableStateFlow<ApiResult<List<StationInfo>>>(ApiResult.Loading)
-    val allFavoriteStations = _allFavoriteStations.asStateFlow()
+    val nearByStationWithFavorite: StateFlow<ApiResult<List<StationInfo>>> = combine(
+        _nearByStationFromFlask, _favoriteStations)
+    { nearByStationFromFlask, favoriteList ->
+        when (nearByStationFromFlask) {
+            is ApiResult.Success -> {
+                ApiResult.Success(
+                    nearByStationFromFlask.data.map { station ->
+                        val isFavorite = station.station_uid in favoriteList
+                        val currentLocation = Location(LocationManager.NETWORK_PROVIDER).apply {
+                            latitude = _userLatLng.value.latitude
+                            longitude = _userLatLng.value.longitude
+                        }
+                        val distance = getStationDistance(LatLng(station.lat, station.lng), currentLocation)
+                        StationInfo(station, isFavorite, distance)
+                    }.sortedBy { it.distance }
+                )
+            }
+
+            is ApiResult.Error -> {
+                ApiResult.Error(nearByStationFromFlask.message)
+            }
+
+            is ApiResult.Loading -> {
+                ApiResult.Loading
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, ApiResult.Loading)
+
+    private val _allStationWithFavorite: StateFlow<ApiResult<List<StationInfo>>> = combine(
+        _allStationFromFlask,_favoriteStations)
+    {allStationFromFlask, favoriteList ->
+        when(allStationFromFlask) {
+            is ApiResult.Success -> {
+                ApiResult.Success(
+                    allStationFromFlask.data.map { station ->
+                        val isFavorite = station.station_uid in favoriteList
+                        val currentLocation = Location(LocationManager.NETWORK_PROVIDER).apply {
+                            latitude = _userLatLng.value.latitude
+                            longitude = _userLatLng.value.longitude
+                        }
+                        val distance = getStationDistance(
+                            LatLng(
+                                station.lat,
+                                station.lng
+                            ), currentLocation
+                        )
+                        StationInfo(station, isFavorite, distance)
+                    }
+                )
+            }
+            is ApiResult.Error -> {
+                ApiResult.Error(allStationFromFlask.message)
+            }
+            is ApiResult.Loading -> {
+                ApiResult.Loading
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, ApiResult.Loading)
+
+    val allFavoriteStations: StateFlow<ApiResult<List<StationInfo>>> = _allStationWithFavorite.map { apiResult ->
+        when (apiResult) {
+            is ApiResult.Success -> {
+                val favoriteStations = apiResult.data.filter { it.isFavorite }
+                if (favoriteStations.isEmpty()) {
+                    ApiResult.Success(emptyList())
+                } else {
+                    ApiResult.Success(favoriteStations.sortedBy { it.distance })
+                }
+            }
+            is ApiResult.Error -> {
+                ApiResult.Error(apiResult.message)
+            }
+            is ApiResult.Loading -> {
+                ApiResult.Loading
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, ApiResult.Loading)
 
     private val _queryStations = MutableStateFlow("")
     val filterStations = _queryStations
@@ -93,8 +153,7 @@ class MainViewModel @Inject constructor(
                         }
                     }
                 }
-        }
-        .stateIn(viewModelScope, SharingStarted.Lazily, ApiResult.Loading)
+        }.stateIn(viewModelScope, SharingStarted.Lazily, ApiResult.Loading)
 
     private val _selectedStation = MutableStateFlow<StationInfo?>(null)
     val selectedStation = _selectedStation.asStateFlow()
@@ -114,8 +173,8 @@ class MainViewModel @Inject constructor(
                         TAG,
                         "[Launch] _currentLatLng => lat: ${location.latitude}, lon: ${location.longitude}"
                     )
-                    _currentLatLng.value = LatLng(location.latitude, location.longitude)
-                    _realUserLatLng.value = LatLng(location.latitude, location.longitude)
+                    _mapLatLng.value = LatLng(location.latitude, location.longitude)
+                    _userLatLng.value = LatLng(location.latitude, location.longitude)
                 }
             }
         }
@@ -131,113 +190,15 @@ class MainViewModel @Inject constructor(
             _range.value = roomRepository.getSettingValue("user_range").toInt()
         }
 
-        combine(
-            _nearByStationFromFlask,
-            _favoriteStations
-        ) { nearByStationFromFlask, favoriteList ->
-            when(nearByStationFromFlask) {
-                is ApiResult.Success -> {
-                    ApiResult.Success(
-                        nearByStationFromFlask.data.map { station ->
-                            val isFavorite = station.station_uid in favoriteList
-                            val currentLocation = Location(LocationManager.NETWORK_PROVIDER).apply {
-                                latitude = _currentLatLng.value.latitude
-                                longitude = _currentLatLng.value.longitude
-                            }
-                            val distance = getStationDistance(LatLng(station.lat, station.lng), currentLocation)
-                            StationInfo(station, isFavorite, distance)
-                        }.sortedBy { it.distance }
-                    )
-                }
-
-                is ApiResult.Error -> {
-                    ApiResult.Error(nearByStationFromFlask.message)
-                }
-
-                is ApiResult.Loading -> {
-                    ApiResult.Loading
-                }
-            }
-        }.onEach {
-            _nearByStationWithFavorite.value = it
-        }.flowOn(
-            Dispatchers.IO
-        ).launchIn(
-            viewModelScope
-        )
-
-        fetchAllStations()
-        startPeriodFetchData()
-
-        _allStationFromFlask.combine(_favoriteStations) { allStationFromFlask, favoriteList ->
-            when(allStationFromFlask) {
-                is ApiResult.Success -> {
-                    ApiResult.Success(
-                        allStationFromFlask.data.map { station ->
-                        val isFavorite = station.station_uid in favoriteList
-                        val currentLocation = Location(LocationManager.NETWORK_PROVIDER).apply {
-                            latitude = _currentLatLng.value.latitude
-                            longitude = _currentLatLng.value.longitude
-                        }
-                        val distance = getStationDistance(
-                            LatLng(
-                                station.lat,
-                                station.lng
-                            ), currentLocation
-                        )
-                        StationInfo(station, isFavorite, distance)
-                        }
-                    )
-                }
-                is ApiResult.Error -> {
-                    ApiResult.Error(allStationFromFlask.message)
-                }
-                is ApiResult.Loading -> {
-                    ApiResult.Loading
-                }
-            }
-        }.onEach {
-            _allStationWithFavorite.value = it
-        }.flowOn(
-            Dispatchers.IO
-        ).launchIn(
-            viewModelScope
-        )
-
-        _allStationWithFavorite.onEach {
-            when(it) {
-                is ApiResult.Success -> {
-                    Log.d(TAG,"_allStationWithFavorite SUCCESS")
-                    val favoriteStations = it.data.filter { item -> item.isFavorite }
-                    if (favoriteStations.isEmpty()) {
-                        _allFavoriteStations.value = ApiResult.Success(emptyList())
-                    } else {
-                        _allFavoriteStations.value = ApiResult.Success(favoriteStations.sortedBy { it.distance })
-                    }
-                }
-
-                is ApiResult.Error -> {
-                    Log.d(TAG,"_allStationWithFavorite ERROR")
-                    _allFavoriteStations.value = ApiResult.Error(it.message)
-                }
-                is ApiResult.Loading -> {
-                    Log.d(TAG,"_allStationWithFavorite LOADING")
-                    _allFavoriteStations.value = ApiResult.Loading
-                }
-            }
-        }.flowOn(
-            Dispatchers.IO
-        ).launchIn(
-            viewModelScope
-        )
+        fetchStationDataPerMinute()
     }
 
-    private fun startPeriodFetchData() {
+    private fun fetchStationDataPerMinute() {
         viewModelScope.launch {
             while (true) {
-                delay(60 * 1000)
                 fetchNearByStationInfo()
                 fetchAllStations()
+                delay(60 * 1000) // 1 minute
             }
         }
     }
@@ -250,12 +211,8 @@ class MainViewModel @Inject constructor(
                 TAG, "[setSelectedStation] called fetchNearByStationInfo, station " +
                         "lat = ${stationInfo.stationInfoDetail.lat} , lon = ${stationInfo.stationInfoDetail.lng}"
             )
-            _currentLatLng.value = LatLng(stationInfo.stationInfoDetail.lat,stationInfo.stationInfoDetail.lng)
+            _mapLatLng.value = LatLng(stationInfo.stationInfoDetail.lat,stationInfo.stationInfoDetail.lng)
         }
-    }
-
-    fun updateCameraPosition(cameraPosition: CameraPosition){
-        _mapCameraPosition.value = cameraPosition
     }
 
     fun setupRange(range: Int) {
@@ -267,8 +224,7 @@ class MainViewModel @Inject constructor(
 
     fun updateCurrentLatLng(latitude: Double, longitude: Double) {
         Log.d(TAG, "[setUpMapLocation] latitude = $latitude, longitude = $longitude")
-        _mapLocation = LatLng(latitude, longitude)
-        _currentLatLng.value = LatLng(latitude, longitude)
+        _mapLatLng.value = LatLng(latitude, longitude)
         fetchNearByStationInfo()
     }
 
@@ -277,9 +233,9 @@ class MainViewModel @Inject constructor(
 
         fetchNearByJob?.cancel()
         fetchNearByJob = viewModelScope.launch {
-            val nearByStations = repository.getNearByStationFromFlask(
-                _mapLocation.latitude.toFloat(),
-                _mapLocation.longitude.toFloat(),
+            val nearByStations = bikeRepository.getNearByStationFromFlask(
+                _mapLatLng.value.latitude.toFloat(),
+                _mapLatLng.value.longitude.toFloat(),
                 (range.value.toFloat() / 1000)
             )
             _nearByStationFromFlask.value = nearByStations
@@ -293,7 +249,7 @@ class MainViewModel @Inject constructor(
     private fun fetchAllStations() {
         allStationsJob?.cancel()
         allStationsJob = viewModelScope.launch(Dispatchers.IO) {
-            _allStationFromFlask.value = repository.getAllStationFromFlask()
+            _allStationFromFlask.value = bikeRepository.getAllStationFromFlask()
             Log.d(
                 TAG,
                 "[fetchAllStations] _allStationFromFlask size  : ${_allStationFromFlask.value.toString()}"

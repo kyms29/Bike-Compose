@@ -1,6 +1,8 @@
 package com.ymsu.bike_compose.di
 
 import android.app.Application
+import com.ymsu.bike_compose.data.BikeApiService
+import com.ymsu.bike_compose.data.BikeRepository
 import com.ymsu.bike_compose.room.AppDatabase
 import com.ymsu.bike_compose.room.RoomRepository
 import com.ymsu.bike_compose.room.FavoriteStationDao
@@ -38,5 +40,17 @@ object Module {
     fun provideFavoriteRepository(favoriteStationDao: FavoriteStationDao,
                                   settingsDao: SettingsDao):RoomRepository{
         return RoomRepository(favoriteStationDao,settingsDao)
+    }
+
+    @Provides
+    @Singleton
+    fun provideApiService():BikeApiService{
+        return BikeApiService.create()
+    }
+
+    @Provides
+    @Singleton
+    fun provideBikeRepository(apiService: BikeApiService): BikeRepository{
+        return BikeRepository(apiService)
     }
 }

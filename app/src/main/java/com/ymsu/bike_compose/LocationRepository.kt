@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Singleton
 class LocationRepository @Inject constructor(@ApplicationContext val context: Context) {
     private val fusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(context)

@@ -42,6 +42,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -87,10 +88,10 @@ fun MapScreen(viewModel: MainViewModel) {
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        val currentLatLng by viewModel.currentLatLng.collectAsStateWithLifecycle()
-        val realUserLatLng by viewModel.realUserLatLng.collectAsStateWithLifecycle()
+        val currentLatLng by viewModel.mapLatLng.collectAsStateWithLifecycle()
+        val realUserLatLng by viewModel.userLatLng.collectAsStateWithLifecycle()
 
-        var zoomLevel by remember { mutableStateOf(16f) }
+        var zoomLevel by remember { mutableFloatStateOf(16f) }
 
         val cameraPositionState = rememberCameraPositionState {
             position = CameraPosition.fromLatLngZoom(currentLatLng, zoomLevel)
@@ -560,21 +561,6 @@ fun vectorToBitmapDescriptor(
         vectorDrawable.draw(canvas)
 
         BitmapDescriptorFactory.fromBitmap(bitmap)
-    }
-}
-
-private fun getStationDistance(stationLatLng: LatLng, current: Location): String {
-    var stationLocation = Location(LocationManager.NETWORK_PROVIDER).apply {
-        latitude = stationLatLng.latitude
-        longitude = stationLatLng.longitude
-    }
-
-    val distance = stationLocation.distanceTo(current)
-
-    return if (distance > 1000) {
-        "%.2f".format(distance / 1000).toString() + "公里"
-    } else {
-        distance.toInt().toString() + "公尺"
     }
 }
 
