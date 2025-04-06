@@ -42,11 +42,13 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -66,18 +68,26 @@ import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.Circle
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.GoogleMapComposable
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
-import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.google.maps.android.compose.rememberMarkerState
 import com.ymsu.bike_compose.data.ApiResult
 import com.ymsu.bike_compose.data.StationInfo
 import com.ymsu.bike_compose.data.StationInfoDetail
 import com.ymsu.bike_compose.theme.AppTheme
 import com.ymsu.bike_compose.theme.orange
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import java.text.SimpleDateFormat
 import java.util.Calendar
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 private const val TAG = "[MapScreen]"
 
@@ -88,63 +98,58 @@ fun MapScreen(viewModel: MainViewModel) {
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        val currentLatLng by viewModel.mapLatLng.collectAsStateWithLifecycle()
-        val realUserLatLng by viewModel.userLatLng.collectAsStateWithLifecycle()
+        val mapLatLng by viewModel.mapLatLng.collectAsStateWithLifecycle()
+        val userLatLng by viewModel.userLatLng.collectAsStateWithLifecycle()
 
         var zoomLevel by remember { mutableFloatStateOf(16f) }
 
         val cameraPositionState = rememberCameraPositionState {
-            position = CameraPosition.fromLatLngZoom(currentLatLng, zoomLevel)
+            position = CameraPosition.fromLatLngZoom(mapLatLng, zoomLevel)
         }
-
-        val context = LocalContext.current
-
-        var showStationInfo by remember { mutableStateOf(false) }
-        var selectedMarkerStationInfoDetail by remember {
-            mutableStateOf(
-                StationInfo(
-                    StationInfoDetail()
-                )
-            )
-        }
-        var selectedMarker by remember { mutableStateOf<LatLng?>(null) }
-        val markerSizes = remember { mutableStateMapOf<LatLng, Float>() }
-
+        val circleRange by viewModel.range.collectAsStateWithLifecycle()
         val nearByStationInfos by viewModel.nearByStationWithFavorite.collectAsStateWithLifecycle()
         val selectedStationFromHomeScreen by viewModel.selectedStation.collectAsStateWithLifecycle()
 
-        LaunchedEffect(currentLatLng) {
-            Log.d(TAG,"[LaunchedEffect] currentLatLng")
+        LaunchedEffect(mapLatLng) {
+            Log.d(TAG, "[MapScreen] LaunchedEffect mapLatLng : ${mapLatLng.toString()}")
             cameraPositionState.animate(
-                // use animate seems can avoid map not ready issue...?
-                CameraUpdateFactory.newLatLngZoom(currentLatLng, zoomLevel)
+                CameraUpdateFactory.newLatLngZoom(mapLatLng, zoomLevel)
             )
         }
 
-        LaunchedEffect(selectedStationFromHomeScreen) {
-            if (selectedStationFromHomeScreen != null) {
-                val selectedLatLng = LatLng(
-                    selectedStationFromHomeScreen!!.stationInfoDetail.lat,
-                    selectedStationFromHomeScreen!!.stationInfoDetail.lng
-                )
-
-                selectedMarker = selectedLatLng
-                markerSizes[selectedLatLng] = 1.3f
-                showStationInfo = true
-                selectedMarkerStationInfoDetail = selectedStationFromHomeScreen!!
-                viewModel.setSelectedStation(null)
-            }
-        }
-
         LaunchedEffect(cameraPositionState.isMoving) {
-            if (!cameraPositionState.isMoving) {
-                val position = cameraPositionState.position.target
-                Log.d(TAG, "cameraPositionState is moving to: ${position.latitude}, ${position.longitude}")
-            viewModel.updateCurrentLatLng(position.latitude, position.longitude)
-                zoomLevel = cameraPositionState.position.zoom
+            snapshotFlow { cameraPositionState.isMoving }
+                .distinctUntilChanged()
+                .collect{ isMoving ->
+                    Log.d(TAG,"[MapScreen] collect moving state : ${isMoving}")
+                    if(!isMoving) {
+                        val position = cameraPositionState.position.target
+                        Log.d(TAG, "[MapScreen ]cameraPositionState is changed to: ${position.toString()}")
+                        viewModel.updateCurrentLatLng(position.latitude, position.longitude)
+                        zoomLevel = cameraPositionState.position.zoom
+                    }
+                }
+        }
+
+        val sortedStations = remember(nearByStationInfos) {
+            when (nearByStationInfos) {
+                is ApiResult.Success -> {
+                    val stations = (nearByStationInfos as ApiResult.Success<List<StationInfo>>).data
+                    stations.sortedBy { station ->
+                        calculateDistance(
+                            LatLng(
+                                cameraPositionState.position.target.latitude,
+                                cameraPositionState.position.target.longitude
+                            ),
+                            LatLng(station.stationInfoDetail.lat, station.stationInfoDetail.lng)
+                        )
+                    }
+                }
+                else -> emptyList()
             }
         }
 
+        Log.d(TAG, "sortedLocations = " + sortedStations.size)
 
         Box(modifier = Modifier.fillMaxSize()) {
             GoogleMap(
@@ -164,99 +169,18 @@ fun MapScreen(viewModel: MainViewModel) {
                     ),
                     fillColor = Color.LightGray.copy(alpha = 0.5f),
                     strokeColor = Color.LightGray.copy(alpha = 0.5f),
-                    radius = 1000.0
+                    radius = circleRange.toDouble()
                 )
 
-                when(nearByStationInfos) {
-                    is ApiResult.Success -> {
-                        Log.d(TAG, "[MapScreen] nearByStationInfos size = " + (nearByStationInfos as ApiResult.Success<List<StationInfo>>).data.size)
-
-                        (nearByStationInfos as ApiResult.Success<List<StationInfo>>).data.forEach { (stationInfo, isFavorite, distance) ->
-                            val icon = getRateIcon(
-                                stationInfo.available_bikes + stationInfo.available_e_bikes,
-                                stationInfo.available_return
-                            )
-                            val markerPosition = LatLng(
-                                stationInfo.lat,
-                                stationInfo.lng
-                            )
-                            val markerSize = markerSizes[markerPosition] ?: 1f
-                            Marker(
-                                state = MarkerState(
-                                    position = markerPosition
-                                ),
-                                title = stationInfo.station_name,
-                                onClick = {
-                                    selectedMarker = markerPosition
-                                    markerSizes[markerPosition] = 1.3f
-                                    showStationInfo = true
-                                    selectedMarkerStationInfoDetail =
-                                        StationInfo(stationInfo, isFavorite, distance)
-                                    true
-                                },
-                                icon = vectorToBitmapDescriptor(
-                                    vectorResId = icon,
-                                    context = LocalContext.current,
-                                    markerSize
-                                )
-                            )
-                        }
-                    }
-
-                    is ApiResult.Loading -> {
-
-                    }
-
-                    is ApiResult.Error -> {
-                        Log.d(TAG,"[MapScreen] [nearByStation] error : ${(nearByStationInfos as ApiResult.Error).message}")
-                    }
-                }
-            }
-
-            if (showStationInfo) {
-                Log.d(TAG, "showStationInfo")
-                val currentLocation = Location(LocationManager.NETWORK_PROVIDER).apply {
-                    latitude = currentLatLng.latitude
-                    longitude = currentLatLng.longitude
-                }
-                BottomSheetDialog(currentLocation, selectedMarkerStationInfoDetail,
-                    onDismiss = {
-                        showStationInfo = false
-                        selectedMarker?.let { markerSizes[it] = 1f }
-                        selectedMarker = null
-                    },
-                    onFavoriteClick = {
-                        viewModel.clickFavorite(selectedMarkerStationInfoDetail.stationInfoDetail.station_uid)
-                    },
-                    onShareClick = {
-                        val sendIntent: Intent = Intent().apply {
-                            val mapUri =
-                                "https://www.google.com/maps/dir/?api=1&destination=" + selectedMarkerStationInfoDetail.stationInfoDetail.lat + ","
-                            +selectedMarkerStationInfoDetail.stationInfoDetail.lng
-                            action = Intent.ACTION_SEND
-                            putExtra(
-                                Intent.EXTRA_TEXT,
-                                selectedMarkerStationInfoDetail.stationInfoDetail.station_name + "有" +
-                                        (selectedMarkerStationInfoDetail.stationInfoDetail.available_bikes + selectedMarkerStationInfoDetail.stationInfoDetail.available_e_bikes).toString() + "可借" +
-                                        selectedMarkerStationInfoDetail.stationInfoDetail.available_return.toString() + "可還"
-                                        + "，地點在$mapUri"
-                            )
-                            type = "text/plain"
-                        }
-                        sendIntent.putExtra(
-                            Intent.EXTRA_SUBJECT,
-                            context.getString(R.string.share_subject)
-                        )
-                        val shareIntent = Intent.createChooser(sendIntent, null)
-                        context.startActivity(shareIntent)
-                    },
-                    onNavigateClick = {
-                        val gmmIntentUri =
-                            Uri.parse("google.navigation:q=" + selectedMarkerStationInfoDetail.stationInfoDetail.lat + "," + selectedMarkerStationInfoDetail.stationInfoDetail.lng + "&mode=w")
-                        val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
-                        mapIntent.setPackage("com.google.android.apps.maps")
-                        context.startActivity(mapIntent)
-                    }
+                MarkerContents(
+                    LatLng(
+                        cameraPositionState.position.target.latitude,
+                        cameraPositionState.position.target.longitude
+                    ),
+                    sortedStations,
+                    selectedStationFromHomeScreen,
+                    { viewModel.setSelectedStation(null) },
+                    { uid -> viewModel.clickFavorite(uid) }
                 )
             }
 
@@ -264,7 +188,7 @@ fun MapScreen(viewModel: MainViewModel) {
                 onClick = {
                     cameraPositionState.move(
                         CameraUpdateFactory.newLatLngZoom(
-                            realUserLatLng,
+                            userLatLng,
                             16f
                         )
                     )
@@ -281,13 +205,135 @@ fun MapScreen(viewModel: MainViewModel) {
     }
 }
 
+private fun calculateDistance(from: LatLng, to: LatLng): Double {
+    val earthRadius = 6371.0
+
+    val latDiff = Math.toRadians(to.latitude - from.latitude)
+    val lngDiff = Math.toRadians(to.longitude - from.longitude)
+
+    val a = sin(latDiff / 2).pow(2) + cos(Math.toRadians(from.latitude)) *
+            cos(Math.toRadians(to.latitude)) * sin(lngDiff / 2).pow(2)
+    val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+//    Log.d(TAG, "[calculateDistance] = ${earthRadius * c}")
+    return earthRadius * c
+}
+
+@Composable
+@GoogleMapComposable
+private fun MarkerContents(
+    center: LatLng,
+    sortedLocations: List<StationInfo>,
+    selectedStationFromHomeScreen: StationInfo?,
+    handleSelectStationInfo: () -> Unit,
+    onFavoriteClick: (String) -> Unit
+) {
+    val context = LocalContext.current
+    var showStationInfo by remember { mutableStateOf(false) }
+    var selectedStationInfo by remember { mutableStateOf<StationInfo?>(null)}
+
+    LaunchedEffect(selectedStationFromHomeScreen) {
+        selectedStationFromHomeScreen?.apply {
+            showStationInfo = true
+            selectedStationInfo = selectedStationFromHomeScreen
+            handleSelectStationInfo()
+        }
+    }
+
+    val markers = remember {
+        mutableStateListOf<StationInfo>()
+    }
+
+    LaunchedEffect(sortedLocations) {
+        markers.removeIf { station ->
+            calculateDistance(
+                center,
+                LatLng(station.stationInfoDetail.lat, station.stationInfoDetail.lng)
+            ) > (1).toDouble()
+        }
+
+        sortedLocations.forEach { station ->
+            delay(30)
+            markers.add(station)
+        }
+
+        Log.d(TAG, "[MarkerContents] markers size = ${markers.size}")
+    }
+
+    markers.forEach { station ->
+        key(station.stationInfoDetail.station_uid) {
+            val icon = getRateIcon(
+                station.stationInfoDetail.available_bikes + station.stationInfoDetail.available_e_bikes,
+                station.stationInfoDetail.available_return
+            )
+            var markerSize = if (selectedStationInfo?.stationInfoDetail?.station_uid == station.stationInfoDetail.station_uid) 1.3f else 1f
+            Marker(
+                state = rememberMarkerState(position = LatLng(station.stationInfoDetail.lat, station.stationInfoDetail.lng)),
+                title = station.stationInfoDetail.station_name,
+                onClick = {
+                    markerSize = 1.3f
+                    showStationInfo = true
+                    selectedStationInfo = station
+                    true
+                },
+                icon = vectorToBitmapDescriptor(
+                    vectorResId = icon,
+                    context = LocalContext.current,
+                    markerSize
+                )
+            )
+        }
+    }
+
+    if (showStationInfo) {
+        Log.d(TAG, "showStationInfo")
+        BottomSheetDialog(
+            selectedStationInfo,
+            onDismiss = {
+                showStationInfo = false
+                selectedStationInfo = null
+            },
+            onFavoriteClick = onFavoriteClick,
+            onShareClick = {
+                val sendIntent: Intent = Intent().apply {
+                    type = "text/plain"
+                    action = Intent.ACTION_SEND
+
+                    val text = selectedStationInfo?.let { info ->
+                        val mapUri = "https://www.google.com/maps/dir/?api=1&destination=" + info.stationInfoDetail.lat + ","+info.stationInfoDetail.lng
+                        info.stationInfoDetail.station_name + "有" +
+                                (info.stationInfoDetail.available_bikes + info.stationInfoDetail.available_e_bikes).toString() + "可借" +
+                                info.stationInfoDetail.available_return.toString() + "可還" + "，地點在$mapUri"
+                    } ?: "尚未選擇站點"
+
+                    putExtra(Intent.EXTRA_TEXT,text)
+
+                }
+                sendIntent.putExtra(
+                    Intent.EXTRA_SUBJECT,
+                    context.getString(R.string.share_subject)
+                )
+                val shareIntent = Intent.createChooser(sendIntent, null)
+                context.startActivity(shareIntent)
+            },
+            onNavigateClick = {
+               selectedStationInfo?.let { info ->
+                   val uri = Uri.parse("google.navigation:q=" + info.stationInfoDetail.lat + "," + info.stationInfoDetail.lng + "&mode=w")
+                   val mapIntent = Intent(Intent.ACTION_VIEW, uri)
+                   mapIntent.setPackage("com.google.android.apps.maps")
+                   context.startActivity(mapIntent)
+               }
+            }
+        )
+    }
+
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BottomSheetDialog(
-    currentLocation: Location,
-    completeStationInfo: StationInfo,
+    stationInfo: StationInfo?,
     onDismiss: () -> Unit,
-    onFavoriteClick: () -> Unit,
+    onFavoriteClick: (String) -> Unit,
     onShareClick: () -> Unit,
     onNavigateClick: () -> Unit
 ) {
@@ -299,13 +345,13 @@ private fun BottomSheetDialog(
         shape = RectangleShape,
         contentWindowInsets = { WindowInsets(0.dp) }
     ) {
-        DialogContent(completeStationInfo, currentLocation)
-        BottomRowContent(completeStationInfo, onFavoriteClick, onShareClick, onNavigateClick)
+        DialogContent(stationInfo)
+        BottomRowContent(stationInfo, onFavoriteClick, onShareClick, onNavigateClick)
     }
 }
 
 @Composable
-private fun DialogContent(completeStationInfo: StationInfo, currentLocation: Location) {
+private fun DialogContent(stationInfo: StationInfo?) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -330,7 +376,9 @@ private fun DialogContent(completeStationInfo: StationInfo, currentLocation: Loc
                             .padding(top = 20.dp, bottom = 20.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
-                        text = completeStationInfo.stationInfoDetail.available_bikes.toString() + "可借"
+                        text = stationInfo?.let { info ->
+                            info.stationInfoDetail.available_bikes.toString() + "可借"
+                        }?: "0可借"
                     )
                 }
                 Icon(
@@ -361,7 +409,9 @@ private fun DialogContent(completeStationInfo: StationInfo, currentLocation: Loc
                             .padding(top = 20.dp, bottom = 20.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
-                        text = completeStationInfo.stationInfoDetail.available_e_bikes.toString() + "可借"
+                        text = stationInfo?.let { info ->
+                            info.stationInfoDetail.available_e_bikes.toString() + "可借"
+                        }?: "0可借"
                     )
                 }
                 Icon(
@@ -389,7 +439,9 @@ private fun DialogContent(completeStationInfo: StationInfo, currentLocation: Loc
                             .padding(top = 20.dp, bottom = 20.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
-                        text = completeStationInfo.stationInfoDetail.available_return.toString() + "可還"
+                        text = stationInfo?.let { info ->
+                            info.stationInfoDetail.available_return.toString() + "可還"
+                        } ?: "0可還"
                     )
                 }
                 Icon(
@@ -411,7 +463,7 @@ private fun DialogContent(completeStationInfo: StationInfo, currentLocation: Loc
 
             var currentTimeDate = Calendar.getInstance().time
             var diff =
-                (currentTimeDate.time - convertTime(completeStationInfo.stationInfoDetail.update_time).time.time) / 1000
+                (currentTimeDate.time - convertTime(stationInfo?.stationInfoDetail?.update_time ?: "0").time.time) / 1000
 
             Text(
                 modifier = Modifier
@@ -422,11 +474,13 @@ private fun DialogContent(completeStationInfo: StationInfo, currentLocation: Loc
                 fontSize = 12.sp
             )
 
-            val distanceString = if (completeStationInfo.distance > 1000) {
-                "%.2f".format(completeStationInfo.distance / 1000).toString() + "公里"
-            } else {
-                completeStationInfo.distance.toInt().toString() + "公尺"
-            }
+            val distanceString = stationInfo?.let { info ->
+                if (info.distance > 1000) {
+                    "%.2f".format(info.distance / 1000).toString() + "公里"
+                } else {
+                    info.distance.toInt().toString() + "公尺"
+                }
+            } ?: ""
 
             Text(
                 modifier = Modifier
@@ -441,29 +495,27 @@ private fun DialogContent(completeStationInfo: StationInfo, currentLocation: Loc
         Text(
             modifier = Modifier.padding(top = 20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
-            text = completeStationInfo.stationInfoDetail.station_name.substringAfter("_")
+            text = stationInfo?.stationInfoDetail?.station_name?.substringAfter("_") ?: ""
         )
         Text(
             modifier = Modifier.padding(top = 20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
-            text = completeStationInfo.stationInfoDetail.station_address
+            text = stationInfo?.stationInfoDetail?.station_address ?: ""
         )
     }
 }
 
 @Composable
 private fun BottomRowContent(
-    completeStationInfo: StationInfo,
-    onFavoriteClick: () -> Unit,
+    stationInfo: StationInfo?,
+    onFavoriteClick: (String) -> Unit,
     onShareClick: () -> Unit,
     onNavigateClick: () -> Unit
 ) {
-    var isFavorite by remember {
-        mutableStateOf(completeStationInfo.isFavorite)
-    }
+    var isFavorite by remember { mutableStateOf(stationInfo?.isFavorite ?: false)  }
     Log.d(
         TAG,
-        "[BottomRowContent] Create or recompose , isFavorite = ${completeStationInfo.isFavorite}"
+        "[BottomRowContent] Create or recompose , isFavorite = ${stationInfo?.isFavorite}"
     )
 
     Row(
@@ -473,7 +525,7 @@ private fun BottomRowContent(
     ) {
         Button(
             onClick = {
-                onFavoriteClick()
+                onFavoriteClick(stationInfo?.stationInfoDetail?.station_uid ?: "")
                 isFavorite = !isFavorite
             },
             modifier = Modifier
@@ -583,8 +635,7 @@ fun PreviewBottomSheetDialog() {
     AppTheme {
         Surface(color = MaterialTheme.colorScheme.onPrimaryContainer) {
             DialogContent(
-                currentLocation = currentLocation,
-                completeStationInfo = StationInfo(
+                stationInfo = StationInfo(
                     StationInfoDetail(station_address = "測試地址用", station_name = "測試站名用")
                 )
             )
@@ -597,7 +648,7 @@ fun PreviewBottomSheetDialog() {
 fun PreviewBottomRowContent() {
     AppTheme {
         BottomRowContent(
-            completeStationInfo = StationInfo(StationInfoDetail()),
+            stationInfo = StationInfo(StationInfoDetail()),
             onFavoriteClick = {},
             onShareClick = {},
             onNavigateClick = {})
