@@ -36,6 +36,10 @@ import androidx.compose.material.icons.filled.DirectionsBike
 import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocalParking
+import androidx.compose.material.icons.filled.NearMe
+import androidx.compose.material.icons.outlined.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.NearMe
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -53,9 +57,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -124,16 +130,20 @@ private fun HomeMainView(
             .fillMaxSize()
             .background(Color.LightGray.copy(alpha = 0.3f))
     ) {
+        var showFavoriteList by remember {
+            mutableStateOf(false)
+        }
+
         Column(
             verticalArrangement = Arrangement.spacedBy((-1).dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(150.dp)
+                .height(200.dp)
                 .background(MaterialTheme.colorScheme.primary.copy(0.9f))
         ) {
             Text(
                 text = "尋找YouBike站點",
-                color = Color.DarkGray,
+                color = Color.White,
                 fontSize = 24.sp,
                 modifier = Modifier
                     .padding(20.dp)
@@ -141,31 +151,80 @@ private fun HomeMainView(
             )
         }
 
-        Spacer(
-            modifier = Modifier.height(26.dp)
-        )
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Image(
+                modifier = Modifier.fillMaxWidth(),
+                painter = painterResource(id = R.drawable.arc_2_),
+                contentDescription = "",
+                colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary.copy(0.9f))
+            )
 
-        Text(
-            modifier = Modifier.padding(start = 20.dp),
-            text = "附近的站點",
-            color = Color.DarkGray,
-            style = MaterialTheme.typography.titleMedium,
-        )
+            Column {
+                Row(modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center) {
+                    Card(modifier = Modifier
+                        .width(100.dp)
+                        .height(150.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        onClick = { showFavoriteList = false }
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(modifier = Modifier
+                                    .size(50.dp)
+                                    .background(MaterialTheme.colorScheme.primaryContainer, shape = CircleShape)
+                                    .padding(8.dp),
+                                    imageVector = if (showFavoriteList) Icons.Outlined.NearMe else Icons.Filled.NearMe,
+                                    contentDescription = "",
+                                    tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.height(32.dp))
+                                Text(modifier = Modifier.fillMaxWidth(), text = "鄰近站點", textAlign = TextAlign.Center)
+                            }
+                        }
+                    }
 
-        BikeStationList(stations = nearByStations, onClick)
+                    Spacer(modifier = Modifier.width(32.dp))
 
-        Spacer(
-            modifier = Modifier.height(16.dp)
-        )
+                    Card(modifier = Modifier
+                        .width(100.dp)
+                        .height(150.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        onClick = { showFavoriteList = true }
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(modifier = Modifier
+                                    .size(50.dp)
+                                    .background(MaterialTheme.colorScheme.primaryContainer, shape = CircleShape)
+                                    .padding(8.dp),
+                                    imageVector = if (showFavoriteList) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                    contentDescription = "",
+                                    tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.height(32.dp))
+                                Text(modifier = Modifier.fillMaxWidth(), text = "收藏站點", textAlign = TextAlign.Center)
+                            }
+                        }
+                    }
+                }
 
-        Text(
-            text = "收藏站點",
-            color = Color.DarkGray,
-            modifier = Modifier.padding(start = 20.dp),
-            style = MaterialTheme.typography.titleMedium,
-        )
+                Spacer(
+                    modifier = Modifier.height(50.dp)
+                )
 
-        FavoriteStationList(stations = allFavoriteStations, onClick)
+                Text(
+                    text = if (showFavoriteList) "收藏站點列表" else "鄰近站點列表",
+                    color = Color.DarkGray,
+                    modifier = Modifier.padding(start = 20.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+
+                if (showFavoriteList)
+                    FavoriteStationList(stations = allFavoriteStations, onClick)
+                else
+                    BikeStationList(stations = nearByStations, onClick)
+            }
+        }
+
     }
 }
 

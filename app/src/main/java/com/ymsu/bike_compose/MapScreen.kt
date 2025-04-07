@@ -180,7 +180,8 @@ fun MapScreen(viewModel: MainViewModel) {
                     sortedStations,
                     selectedStationFromHomeScreen,
                     { viewModel.setSelectedStation(null) },
-                    { uid -> viewModel.clickFavorite(uid) }
+                    { uid -> viewModel.clickFavorite(uid) },
+                    (circleRange.toDouble()/1000)
                 )
             }
 
@@ -225,7 +226,8 @@ private fun MarkerContents(
     sortedLocations: List<StationInfo>,
     selectedStationFromHomeScreen: StationInfo?,
     handleSelectStationInfo: () -> Unit,
-    onFavoriteClick: (String) -> Unit
+    onFavoriteClick: (String) -> Unit,
+    rangeLimit: Double
 ) {
     val context = LocalContext.current
     var showStationInfo by remember { mutableStateOf(false) }
@@ -245,10 +247,7 @@ private fun MarkerContents(
 
     LaunchedEffect(sortedLocations) {
         markers.removeIf { station ->
-            calculateDistance(
-                center,
-                LatLng(station.stationInfoDetail.lat, station.stationInfoDetail.lng)
-            ) > (1).toDouble()
+            calculateDistance(center, LatLng(station.stationInfoDetail.lat, station.stationInfoDetail.lng)) > rangeLimit
         }
 
         sortedLocations.forEach { station ->
