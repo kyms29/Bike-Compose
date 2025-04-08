@@ -30,6 +30,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsBike
@@ -37,7 +39,6 @@ import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocalParking
 import androidx.compose.material.icons.filled.NearMe
-import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.NearMe
 import androidx.compose.material3.Card
@@ -62,6 +63,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -106,16 +108,32 @@ private fun ColumnScreen(
         navController.navigate("Map")
     }
 
-    HomeMainView(nearByStations, allFavoriteStations, onClick)
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var isExpanded by remember { mutableStateOf(false) }
 
-    Box(
-        modifier = Modifier.fillMaxWidth(),
-        contentAlignment = Alignment.Center
+    Box(modifier = Modifier
+        .fillMaxSize()
+        .clickable(indication = null,
+            interactionSource = remember { MutableInteractionSource() }
+        ) {
+            keyboardController?.hide()
+            isExpanded = false
+        }
     ) {
-        SearchBar(
-            modifier = Modifier
-                .offset(y = 110.dp), viewModel = viewModel, navController
-        )
+        HomeMainView(nearByStations, allFavoriteStations, onClick)
+
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            SearchBar(
+                modifier = Modifier.offset(y = 110.dp),
+                viewModel = viewModel,
+                navController,
+                isExpanded,
+                {isExpanded = it}
+            )
+        }
     }
 }
 
@@ -172,7 +190,10 @@ private fun HomeMainView(
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(modifier = Modifier
                                     .size(50.dp)
-                                    .background(MaterialTheme.colorScheme.primaryContainer, shape = CircleShape)
+                                    .background(
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                        shape = CircleShape
+                                    )
                                     .padding(8.dp),
                                     imageVector = if (showFavoriteList) Icons.Outlined.NearMe else Icons.Filled.NearMe,
                                     contentDescription = "",
@@ -195,7 +216,10 @@ private fun HomeMainView(
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(modifier = Modifier
                                     .size(50.dp)
-                                    .background(MaterialTheme.colorScheme.primaryContainer, shape = CircleShape)
+                                    .background(
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                        shape = CircleShape
+                                    )
                                     .padding(8.dp),
                                     imageVector = if (showFavoriteList) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                                     contentDescription = "",
@@ -232,7 +256,9 @@ private fun HomeMainView(
 fun SearchBar(
     modifier: Modifier,
     viewModel: MainViewModel,
-    navController: NavController
+    navController: NavController,
+    isExpanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit
 ) {
     val filterStations by viewModel.filterStations.collectAsState()
 
@@ -250,7 +276,7 @@ fun SearchBar(
         navController.navigate("Map")
     }
 
-    SearchBarDetail(modifier, filterStations, onQueryChange, onClick)
+    SearchBarDetail(modifier, filterStations, onQueryChange, onClick, isExpanded, onExpandedChange)
 }
 
 @Composable
@@ -258,11 +284,10 @@ private fun SearchBarDetail(
     modifier: Modifier,
     filterStations: ApiResult<List<StationInfo>>,
     onQueryChange: (String) -> Unit,
-    onClick: (StationInfo) -> Unit
+    onClick: (StationInfo) -> Unit,
+    isExpanded:Boolean,
+    onExpandedChange: (Boolean) -> Unit
 ) {
-    var isExpanded by remember {
-        mutableStateOf(false)
-    }
     var searchString by remember {
         mutableStateOf("")
     }
@@ -285,12 +310,16 @@ private fun SearchBarDetail(
             placeholder = {
                 androidx.compose.material3.Text(text = "搜尋站名...")
             },
+            keyboardOptions = KeyboardOptions.Default.copy(
+                imeAction = ImeAction.Search
+            ),
+            keyboardActions = KeyboardActions(onSearch = {
+                keyboardController?.hide()
+            }),
             modifier = modifier
                 .width(350.dp)
-                .heightIn(min = 56.dp)
-                .clickable { keyboardController?.hide() },
-            shape = if (isExpanded) RoundedCornerShape(20.dp, 20.dp)
-            else RoundedCornerShape(20.dp),
+                .heightIn(min = 56.dp),
+            shape = if (isExpanded) RoundedCornerShape(20.dp, 20.dp) else RoundedCornerShape(20.dp),
             interactionSource =
             remember { MutableInteractionSource() }
                 .also { interactionSource ->
@@ -298,9 +327,10 @@ private fun SearchBarDetail(
                         interactionSource.interactions.collect {
                             if (it is PressInteraction.Release) {
                                 // works like onClick
-                                isExpanded = !isExpanded
+                                var change = !isExpanded
+                                onExpandedChange(change)
                                 keyboardController?.apply {
-                                    if (isExpanded) show() else hide()
+                                    if (change) show() else hide()
                                 }
                             }
                         }
@@ -881,7 +911,9 @@ fun PreviewSearchBarDetails() {
             filterStations = result,
             onQueryChange = { query ->
             },
-            onClick = { completeStationInfo -> })
+            onClick = { completeStationInfo -> },
+            false,
+            {})
     }
 }
 

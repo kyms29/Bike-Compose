@@ -200,7 +200,9 @@ fun MapScreen(viewModel: MainViewModel) {
                 shape = CircleShape,
                 containerColor = Color.White
             ) {
-                Icon(imageVector = Icons.Default.MyLocation, contentDescription = "mylocation")
+                Icon(imageVector = Icons.Default.MyLocation,
+                    contentDescription = "mylocation",
+                    tint = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -542,18 +544,18 @@ private fun BottomRowContent(
             }
         }
 
-        Button(
-            onClick = { onShareClick() },
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Column {
-                Icon(imageVector = Icons.Default.Share, contentDescription = "share")
-                Text(text = "分享", color = MaterialTheme.colorScheme.secondary)
-            }
-        }
+//        Button(
+//            onClick = { onShareClick() },
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .weight(1f),
+//            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+//        ) {
+//            Column {
+//                Icon(imageVector = Icons.Default.Share, contentDescription = "share")
+//                Text(text = "分享", color = MaterialTheme.colorScheme.secondary)
+//            }
+//        }
 
         Button(
             onClick = { onNavigateClick() },

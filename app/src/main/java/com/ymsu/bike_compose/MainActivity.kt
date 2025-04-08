@@ -11,7 +11,6 @@ import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -70,7 +69,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         isNetworkConnect()
         setContent {
             CheckPermissions(hasNetwork, onRetry = { isNetworkConnect() })
@@ -187,12 +185,12 @@ fun BikeComposeApp(hasNetwork: LiveData<Boolean>, onRetry: () -> Unit) {
             }) { paddingValues ->
             NavHost(
                 navController = navController,
-                startDestination = "Map",
+                startDestination = Screens.Map.route,
                 modifier = Modifier.padding(paddingValues)
             ) {
-                composable("Map") { MapScreen(viewModel) }
-                composable("Home") { HomeScreen(viewModel, navController) }
-                composable("Settings") { SettingsScreen(viewModel) }
+                composable(Screens.Map.route) { MapScreen(viewModel) }
+                composable(Screens.Home.route) { HomeScreen(viewModel, navController) }
+                composable(Screens.Settings.route) { SettingsScreen(viewModel) }
             }
 
             Log.d(TAG, "[BikeComposeApp] networkStatus = $networkStatus")
@@ -228,7 +226,7 @@ fun BikeComposeApp(hasNetwork: LiveData<Boolean>, onRetry: () -> Unit) {
 
 @Composable
 fun BottomNavigationBar(navController: NavController) {
-    val items = listOf("Home", "Map", "Settings")
+    val items = listOf(Screens.Home,Screens.Map,Screens.Settings)
     val currentBackStackEntry = navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry.value?.destination?.route
 
@@ -239,9 +237,9 @@ fun BottomNavigationBar(navController: NavController) {
             BottomNavigationItem(
                 selectedContentColor = MaterialTheme.colorScheme.onPrimary,
                 unselectedContentColor = MaterialTheme.colorScheme.surfaceVariant,
-                selected = currentRoute == item,
+                selected = currentRoute == item.route,
                 onClick = {
-                    navController.navigate(item) {
+                    navController.navigate(item.route) {
                         popUpTo(navController.graph.startDestinationId) { saveState = true }
                         launchSingleTop = true
                         restoreState = true
@@ -249,16 +247,11 @@ fun BottomNavigationBar(navController: NavController) {
                 },
                 icon = {
                     Icon(
-                        imageVector = when (item) {
-                            "Home" -> Icons.Default.Home
-                            "Map" -> Icons.Default.LocationOn
-                            "Settings" -> Icons.Default.Settings
-                            else -> Icons.Default.Settings
-                        },
-                        contentDescription = item
+                        imageVector = item.icon,
+                        contentDescription = item.title
                     )
                 },
-                label = { Text(text = item) })
+                label = { Text(text = item.title) })
         }
     }
 }
