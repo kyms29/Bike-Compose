@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">Bike-Compose</string>
-    <string name="share_subject">Ubike站點資訊</string>
+    <string name="app_name">尋找雙北YouBike站點</string>
+    <string name="share_subject">YouBike站點資訊</string>
 </resources>

@@ -75,6 +75,59 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun goToSettingsPage() {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", packageName, null)
+        }
+        startActivity(intent)
+    }
+
+    @OptIn(ExperimentalPermissionsApi::class)
+    @Composable
+    private fun CheckPermissions(
+        hasNetwork: MutableLiveData<Boolean>,
+        onRetry: () -> Unit,
+    ) {
+        val locationPermissionsState = rememberMultiplePermissionsState(
+            listOf(
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            )
+        )
+        var showSettingDialog by remember { mutableStateOf(false) }
+        var isPermissionGranted = locationPermissionsState.permissions.all { it.status.isGranted }
+
+        LaunchedEffect(Unit) {
+            if (!isPermissionGranted) {
+                locationPermissionsState.launchMultiplePermissionRequest()
+                showSettingDialog = true
+            }
+        }
+
+        if (isPermissionGranted) {
+            BikeComposeApp(hasNetwork, onRetry)
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("無法使用位置服務，請至設定中授予應用程式位置權限")
+
+                if (showSettingDialog) {
+                    GoToSettingsDialog(
+                        onDismiss = {
+                            showSettingDialog = false
+                            Log.d(TAG,"[onDismiss] showSettingDialog = ${showSettingDialog}")
+                                    },
+                        onConfirm = { goToSettingsPage() }
+                    )
+                }
+            }
+        }
+    }
+
     @Composable
     private fun GoToSettingsDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
         AlertDialog(
@@ -96,67 +149,6 @@ class MainActivity : ComponentActivity() {
                 { Text(text = "取消", color = MaterialTheme.colorScheme.surfaceVariant) }
             }
         )
-    }
-
-    private fun goToSettingsPage() {
-        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = Uri.fromParts("package", packageName, null)
-        }
-        startActivity(intent)
-    }
-
-    @OptIn(ExperimentalPermissionsApi::class)
-    @Composable
-    private fun CheckPermissions(
-        hasNetwork: MutableLiveData<Boolean>,
-        onRetry: () -> Unit
-    ) {
-        val locationPermissionsState = rememberMultiplePermissionsState(
-            listOf(
-                Manifest.permission.ACCESS_COARSE_LOCATION,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            )
-        )
-        var showSettingDialog by remember { mutableStateOf(false) }
-        var isPermissionGranted by remember { mutableStateOf(false) }
-
-        LaunchedEffect(Unit) {
-            locationPermissionsState.launchMultiplePermissionRequest()
-        }
-
-        // isGranted means use grant or not, shouldShowRationale means user choose denied
-        val shouldShowSettingDialog = locationPermissionsState.permissions.any {
-            !it.status.isGranted && !it.status.shouldShowRationale
-        }
-
-        LaunchedEffect(shouldShowSettingDialog) {
-            if (shouldShowSettingDialog) {
-                showSettingDialog = true
-            }
-        }
-
-        if (showSettingDialog) {
-            GoToSettingsDialog(
-                onDismiss = { showSettingDialog = false },
-                onConfirm = { goToSettingsPage() }
-            )
-        }
-
-        isPermissionGranted = locationPermissionsState.permissions.all { it.status.isGranted }
-
-        if (isPermissionGranted) {
-            BikeComposeApp(hasNetwork, onRetry)
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .clickable(enabled = false) { },
-                contentAlignment = Alignment.Center
-            ) {
-                Text("Need granted location permissions!")
-            }
-        }
     }
 
     private fun isNetworkConnect() {
