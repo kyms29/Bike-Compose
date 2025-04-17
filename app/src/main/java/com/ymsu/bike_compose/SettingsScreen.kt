@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -59,9 +60,12 @@ private fun Content(onRangeChanged: (Int) -> Unit, range: State<Int>) {
             color = MaterialTheme.colorScheme.primary
         )
 
+        val context = LocalContext.current
+        val version = context.packageManager.getPackageInfo(context.packageName,0).versionName
+
         Text(
             modifier = Modifier.padding(16.dp),
-            text = "版本 v1.0"
+            text = "版本$version"
         )
     }
 }

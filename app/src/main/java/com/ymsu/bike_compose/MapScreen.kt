@@ -243,18 +243,27 @@ private fun MarkerContents(
         }
     }
 
-    val markers = remember {
-        mutableStateListOf<StationInfo>()
+    val markers = remember { mutableStateListOf<StationInfo>() }
+
+    val updateKey = remember(sortedLocations) {
+        sortedLocations.joinToString { it.stationInfoDetail.station_uid + it.stationInfoDetail.update_time }
     }
 
-    LaunchedEffect(sortedLocations) {
+    LaunchedEffect(updateKey) {
         markers.removeIf { station ->
             calculateDistance(center, LatLng(station.stationInfoDetail.lat, station.stationInfoDetail.lng)) > rangeLimit
         }
 
-        sortedLocations.forEach { station ->
-            delay(30)
-            markers.add(station)
+        sortedLocations.forEach { newStation ->
+            val index = markers.indexOfFirst { it.stationInfoDetail.station_uid == newStation.stationInfoDetail.station_uid }
+            if (index >= 0) {
+                if (markers[index].stationInfoDetail.update_time != newStation.stationInfoDetail.update_time) {
+                    markers[index] = newStation
+                }
+            } else {
+                delay(30)
+                markers.add(newStation)
+            }
         }
 
         Log.d(TAG, "[MarkerContents] markers size = ${markers.size}")
@@ -274,11 +283,12 @@ private fun MarkerContents(
                     markerSize = 1.3f
                     showStationInfo = true
                     selectedStationInfo = station
+                    Log.d(TAG,"[selectedStationInfo] UPDATE TIME = ${station.stationInfoDetail.update_time}")
                     true
                 },
                 icon = vectorToBitmapDescriptor(
                     vectorResId = icon,
-                    context = LocalContext.current,
+                    context = context,
                     markerSize
                 )
             )
@@ -286,9 +296,8 @@ private fun MarkerContents(
     }
 
     if (showStationInfo) {
-        Log.d(TAG, "showStationInfo")
         BottomSheetDialog(
-            selectedStationInfo,
+            stationInfo = selectedStationInfo,
             onDismiss = {
                 showStationInfo = false
                 selectedStationInfo = null
@@ -307,7 +316,6 @@ private fun MarkerContents(
                     } ?: "尚未選擇站點"
 
                     putExtra(Intent.EXTRA_TEXT,text)
-
                 }
                 sendIntent.putExtra(
                     Intent.EXTRA_SUBJECT,
@@ -317,17 +325,17 @@ private fun MarkerContents(
                 context.startActivity(shareIntent)
             },
             onNavigateClick = {
-               selectedStationInfo?.let { info ->
-                   val uri = Uri.parse("google.navigation:q=" + info.stationInfoDetail.lat + "," + info.stationInfoDetail.lng + "&mode=w")
-                   val mapIntent = Intent(Intent.ACTION_VIEW, uri)
-                   mapIntent.setPackage("com.google.android.apps.maps")
-                   context.startActivity(mapIntent)
-               }
+                selectedStationInfo?.let { info ->
+                    val uri = Uri.parse("google.navigation:q=" + info.stationInfoDetail.lat + "," + info.stationInfoDetail.lng + "&mode=w")
+                    val mapIntent = Intent(Intent.ACTION_VIEW, uri)
+                    mapIntent.setPackage("com.google.android.apps.maps")
+                    context.startActivity(mapIntent)
+                }
             }
         )
     }
-
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -353,6 +361,7 @@ private fun BottomSheetDialog(
 
 @Composable
 private fun DialogContent(stationInfo: StationInfo?) {
+    Log.d(TAG,"[DialogContent] UPDATE TIME = ${stationInfo?.stationInfoDetail?.update_time}")
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -465,6 +474,8 @@ private fun DialogContent(stationInfo: StationInfo?) {
             var currentTimeDate = Calendar.getInstance().time
             var diff =
                 (currentTimeDate.time - convertTime(stationInfo?.stationInfoDetail?.update_time ?: "0").time.time) / 1000
+
+            Log.d(TAG,"UID = ${stationInfo?.stationInfoDetail?.station_uid}, currentTimeDate = ${currentTimeDate}, updateTime = ${stationInfo?.stationInfoDetail?.update_time}")
 
             Text(
                 modifier = Modifier

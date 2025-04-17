@@ -65,6 +65,7 @@ class MainViewModel @Inject constructor(
                             longitude = _userLatLng.value.longitude
                         }
                         val distance = getStationDistance(LatLng(station.lat, station.lng), currentLocation)
+                        Log.d(TAG,"[nearByStationWithFavorite] UPDATE TIME = ${station.update_time}")
                         StationInfo(station, isFavorite, distance)
                     }.sortedBy { it.distance }
                 )
