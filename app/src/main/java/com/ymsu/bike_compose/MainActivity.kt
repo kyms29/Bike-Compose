@@ -170,6 +170,7 @@ fun BikeComposeApp(hasNetwork: LiveData<Boolean>, onRetry: () -> Unit) {
     AppTheme {
         val navController = rememberNavController()
         val viewModel: MainViewModel = hiltViewModel()
+        val testViewModel: TestViewModel = hiltViewModel()
 
         Scaffold(
             bottomBar = {
@@ -180,7 +181,7 @@ fun BikeComposeApp(hasNetwork: LiveData<Boolean>, onRetry: () -> Unit) {
                 startDestination = Screens.Map.route,
                 modifier = Modifier.padding(paddingValues)
             ) {
-                composable(Screens.Map.route) { MapScreen(viewModel) }
+                composable(Screens.Map.route) { MapScreen(viewModel,testViewModel) }
                 composable(Screens.Home.route) { HomeScreen(viewModel, navController) }
                 composable(Screens.Settings.route) { SettingsScreen(viewModel) }
             }

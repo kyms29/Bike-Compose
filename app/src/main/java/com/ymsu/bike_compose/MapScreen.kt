@@ -41,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -92,12 +93,16 @@ import kotlin.math.sqrt
 private const val TAG = "[MapScreen]"
 
 @Composable
-fun MapScreen(viewModel: MainViewModel) {
+fun MapScreen(viewModel: MainViewModel, testViewModel: TestViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
+
+        val testState by testViewModel.state.collectAsStateWithLifecycle()
+        Log.d(TAG,"nearFavoriteStations size = "+testState.nearFavoriteStations.size)
+
         val mapLatLng by viewModel.mapLatLng.collectAsStateWithLifecycle()
         val userLatLng by viewModel.userLatLng.collectAsStateWithLifecycle()
 
@@ -126,6 +131,7 @@ fun MapScreen(viewModel: MainViewModel) {
                         val position = cameraPositionState.position.target
                         Log.d(TAG, "[MapScreen ]cameraPositionState is changed to: ${position.toString()}")
                         viewModel.updateCurrentLatLng(position.latitude, position.longitude)
+                        testViewModel.updateCurrentLatLng(position.latitude, position.longitude)
                         zoomLevel = cameraPositionState.position.zoom
                     }
                 }
