@@ -14,7 +14,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -26,23 +25,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.google.android.gms.maps.model.LatLng
 import com.ymsu.bike_compose.theme.AppTheme
 
 @Composable
-fun SettingsScreen(viewModel: MainViewModel) {
+fun SettingsScreen(stateViewModel: StateViewModel) {
 
     val onRangeChanged: (Int) -> Unit = { range ->
-        viewModel.setupRange(range)
+        stateViewModel.updateRange(range)
     }
 
-    val range = viewModel.range.collectAsStateWithLifecycle()
+    val state = stateViewModel.state.collectAsStateWithLifecycle()
 
-    Content(onRangeChanged, range)
+    Content(onRangeChanged, state.value.range)
 }
 
 @Composable
-private fun Content(onRangeChanged: (Int) -> Unit, range: State<Int>) {
+private fun Content(onRangeChanged: (Int) -> Unit, range: Int) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -72,7 +70,7 @@ private fun Content(onRangeChanged: (Int) -> Unit, range: State<Int>) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SetupRange(onRangeChanged: (Int) -> Unit, range: State<Int>) {
+private fun SetupRange(onRangeChanged: (Int) -> Unit, range: Int) {
     Text(
         text = "站點顯示範圍",
         color = MaterialTheme.colorScheme.primary
@@ -89,7 +87,7 @@ private fun SetupRange(onRangeChanged: (Int) -> Unit, range: State<Int>) {
     )
 
     var selectedRange by remember {
-        mutableIntStateOf(range.value)
+        mutableIntStateOf(range)
     }
 
     ExposedDropdownMenuBox(expanded = expanded,
@@ -136,6 +134,6 @@ fun PreviewSettings() {
         mutableStateOf(1000)
     }
     AppTheme {
-        Content({}, fakeRange)
+        Content({}, 1000)
     }
 }

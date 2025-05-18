@@ -21,7 +21,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -164,34 +166,34 @@ class MainViewModel @Inject constructor(
 
 
     init {
-        // get actual location first
-        locationRepository.startRequestLocation()
-
-        viewModelScope.launch {
-            locationRepository.currentLocation.collect { location ->
-                location?.let {
-                    Log.d(
-                        TAG,
-                        "[Launch] _currentLatLng => lat: ${location.latitude}, lon: ${location.longitude}"
-                    )
-                    _mapLatLng.value = LatLng(location.latitude, location.longitude)
-                    _userLatLng.value = LatLng(location.latitude, location.longitude)
-                }
-            }
-        }
-
-        // get favorite list
-        viewModelScope.launch {
-            roomRepository.getFavoriteList()
-                .map { stations -> stations.map { it.stationUid }.toSet() ?: emptySet() }
-                .collect { _favoriteStations.value = it }
-        }
-
-        viewModelScope.launch {
-            _range.value = roomRepository.getSettingValue("user_range").toInt()
-        }
-
-        fetchStationDataPerMinute()
+//        // get actual location first
+//        locationRepository.startRequestLocation()
+//
+//        viewModelScope.launch {
+//            locationRepository.currentLocation.collect { location ->
+//                location?.let {
+//                    Log.d(
+//                        TAG,
+//                        "[Launch] _currentLatLng => lat: ${location.latitude}, lon: ${location.longitude}"
+//                    )
+//                    _mapLatLng.value = LatLng(location.latitude, location.longitude)
+//                    _userLatLng.value = LatLng(location.latitude, location.longitude)
+//                }
+//            }
+//        }
+//
+//        // get favorite list
+//        viewModelScope.launch {
+//            roomRepository.getFavoriteList()
+//                .map { stations -> stations.map { it.stationUid }.toSet() ?: emptySet() }
+//                .collect { _favoriteStations.value = it }
+//        }
+//
+//        viewModelScope.launch {
+//            _range.value = roomRepository.getSettingValue("user_range").toInt()
+//        }
+//
+//        fetchStationDataPerMinute()
     }
 
     private fun fetchStationDataPerMinute() {

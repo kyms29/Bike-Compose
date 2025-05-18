@@ -23,11 +23,6 @@ import androidx.compose.material.BottomNavigation
 import androidx.compose.material.BottomNavigationItem
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -56,7 +51,6 @@ import androidx.navigation.compose.rememberNavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
-import com.google.accompanist.permissions.shouldShowRationale
 import com.ymsu.bike_compose.theme.AppTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -169,7 +163,7 @@ fun BikeComposeApp(hasNetwork: LiveData<Boolean>, onRetry: () -> Unit) {
 
     AppTheme {
         val navController = rememberNavController()
-        val viewModel: MainViewModel = hiltViewModel()
+        val stateViewModel: StateViewModel = hiltViewModel()
 
         Scaffold(
             bottomBar = {
@@ -180,9 +174,9 @@ fun BikeComposeApp(hasNetwork: LiveData<Boolean>, onRetry: () -> Unit) {
                 startDestination = Screens.Map.route,
                 modifier = Modifier.padding(paddingValues)
             ) {
-                composable(Screens.Map.route) { MapScreen(viewModel) }
-                composable(Screens.Home.route) { HomeScreen(viewModel, navController) }
-                composable(Screens.Settings.route) { SettingsScreen(viewModel) }
+                composable(Screens.Map.route) { MapScreen(stateViewModel) }
+                composable(Screens.Home.route) { HomeScreen(navController, stateViewModel) }
+                composable(Screens.Settings.route) { SettingsScreen(stateViewModel) }
             }
 
             Log.d(TAG, "[BikeComposeApp] networkStatus = $networkStatus")

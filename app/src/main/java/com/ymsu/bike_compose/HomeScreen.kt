@@ -49,7 +49,6 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -86,17 +85,15 @@ import kotlin.math.abs
 
 
 @Composable
-fun HomeScreen(viewModel: MainViewModel, navController: NavController) {
-    val allFavoriteStations by viewModel.allFavoriteStations.collectAsStateWithLifecycle()
-    val nearByStations by viewModel.nearByStationWithFavorite.collectAsStateWithLifecycle()
-    ColumnScreen(allFavoriteStations, nearByStations, viewModel, navController)
+fun HomeScreen(navController: NavController, stateViewModel: StateViewModel) {
+    val state by stateViewModel.state.collectAsStateWithLifecycle()
+    ColumnScreen(state, stateViewModel, navController)
 }
 
 @Composable
 private fun ColumnScreen(
-    allFavoriteStations: ApiResult<List<StationInfo>>,
-    nearByStations: ApiResult<List<StationInfo>>,
-    viewModel: MainViewModel,
+    state: BikeState,
+    viewModel: StateViewModel,
     navController: NavController
 ) {
     val onClick: (StationInfo) -> Unit = { flaskItemWithFavorite ->
@@ -120,7 +117,7 @@ private fun ColumnScreen(
             isExpanded = false
         }
     ) {
-        HomeMainView(nearByStations, allFavoriteStations, onClick)
+        HomeMainView(state, onClick)
 
         Box(
             modifier = Modifier.fillMaxWidth(),
@@ -129,6 +126,7 @@ private fun ColumnScreen(
             SearchBar(
                 modifier = Modifier.offset(y = 110.dp),
                 viewModel = viewModel,
+                state,
                 navController,
                 isExpanded,
                 {isExpanded = it}
@@ -139,8 +137,7 @@ private fun ColumnScreen(
 
 @Composable
 private fun HomeMainView(
-    nearByStations: ApiResult<List<StationInfo>>,
-    allFavoriteStations: ApiResult<List<StationInfo>>,
+    state: BikeState,
     onClick: (StationInfo) -> Unit
 ) {
     Column(
@@ -243,9 +240,9 @@ private fun HomeMainView(
                 )
 
                 if (showFavoriteList)
-                    FavoriteStationList(stations = allFavoriteStations, onClick)
+                    FavoriteStationList(state, onClick)
                 else
-                    BikeStationList(stations = nearByStations, onClick)
+                    BikeStationList(state, onClick)
             }
         }
 
@@ -255,16 +252,17 @@ private fun HomeMainView(
 @Composable
 fun SearchBar(
     modifier: Modifier,
-    viewModel: MainViewModel,
+    viewModel: StateViewModel,
+    state: BikeState,
     navController: NavController,
     isExpanded: Boolean,
     onExpandedChange: (Boolean) -> Unit
 ) {
-    val filterStations by viewModel.filterStations.collectAsState()
+//    val filterStations = state.searchResults
 
     val onQueryChange: (String) -> Unit = { query ->
         Log.d("", "[onQueryChange] query = $query")
-        viewModel.queryStations(query)
+        viewModel.setQueryString(query)
     }
 
     val onClick: (StationInfo) -> Unit = { completeStationInfo ->
@@ -276,21 +274,24 @@ fun SearchBar(
         navController.navigate("Map")
     }
 
-    SearchBarDetail(modifier, filterStations, onQueryChange, onClick, isExpanded, onExpandedChange)
+    SearchBarDetail(modifier, state, onQueryChange, onClick, isExpanded, onExpandedChange)
 }
 
 @Composable
 private fun SearchBarDetail(
     modifier: Modifier,
-    filterStations: ApiResult<List<StationInfo>>,
+    state: BikeState,
+//    filterStations: List<StationInfo>,
     onQueryChange: (String) -> Unit,
     onClick: (StationInfo) -> Unit,
     isExpanded:Boolean,
     onExpandedChange: (Boolean) -> Unit
 ) {
-    var searchString by remember {
-        mutableStateOf("")
-    }
+    var searchString = state.search
+
+    val filterStations = state.searchResults
+    val errorMessage = state.errorMessage
+    val loading = state.isLoading
 
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -308,7 +309,7 @@ private fun SearchBarDetail(
                 focusedContainerColor = MaterialTheme.colorScheme.surface
             ),
             placeholder = {
-                androidx.compose.material3.Text(text = "搜尋站名...")
+                androidx.compose.material3.Text(text = if (state.search.isEmpty())"搜尋站名..." else "")
             },
             keyboardOptions = KeyboardOptions.Default.copy(
                 imeAction = ImeAction.Search
@@ -353,54 +354,45 @@ private fun SearchBarDetail(
                 elevation = CardDefaults.elevatedCardElevation(defaultElevation = 8.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
-                when (filterStations) {
-                    is ApiResult.Success -> {
-                        if (filterStations.data.isEmpty()) {
-                            Text(
-                                modifier = Modifier.padding(16.dp),
-                                text = "無符合條件之站點",
-                                color = Color.Gray,
-                                style = MaterialTheme.typography.bodyMedium
+                if (filterStations.isEmpty()) {
+                    Text(
+                        modifier = Modifier.padding(16.dp),
+                        text = "無符合條件之站點",
+                        color = Color.Gray,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else if (loading) {
+                    Text(
+                        modifier = Modifier.padding(16.dp),
+                        text = "載入中...",
+                        color = Color.Gray,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else if (errorMessage.isNotEmpty()) {
+                    Text(
+                        modifier = Modifier.padding(16.dp),
+                        text = "資料錯誤，請稍後再試",
+                        color = Color.Gray,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .clip(
+                                shape = RoundedCornerShape(
+                                    bottomStart = 16.dp,
+                                    bottomEnd = 16.dp
+                                )
                             )
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .clip(
-                                        shape = RoundedCornerShape(
-                                            bottomStart = 16.dp,
-                                            bottomEnd = 16.dp
-                                        )
-                                    )
-                                    .background(MaterialTheme.colorScheme.surface),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            .background(MaterialTheme.colorScheme.surface),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
 
-                            ) {
+                    ) {
 
-                                items(filterStations.data.size) { index ->
-                                    // TODO: 這邊要設計成card + 利用viewmodel的all city list 列出相關的站名
-                                    SearchStationCard(filterStations.data, index, onClick)
-                                }
-                            }
+                        items(filterStations.size) { index ->
+                            // TODO: 這邊要設計成card + 利用viewmodel的all city list 列出相關的站名
+                            SearchStationCard(filterStations, index, onClick)
                         }
-                    }
-
-                    is ApiResult.Error -> {
-                        Log.d("","filterStations ERROR: ${filterStations.message}")
-                        Text(
-                            modifier = Modifier.padding(16.dp),
-                            text = "資料錯誤，請稍後再試",
-                            color = Color.Gray,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-
-                    is ApiResult.Loading -> {
-                        Text(
-                            modifier = Modifier.padding(16.dp),
-                            text = "載入中...",
-                            color = Color.Gray,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
                     }
                 }
             }
@@ -527,12 +519,12 @@ private fun SearchStationCard(
 }
 
 @Composable
-fun FavoriteStationList(stations: ApiResult<List<StationInfo>>, onClick: (StationInfo) -> Unit) {
+fun FavoriteStationList(state: BikeState, onClick: (StationInfo) -> Unit) {
     val lazyListState = rememberLazyListState()
 
-    val isLoading = stations is ApiResult.Loading
-    val isError = stations is ApiResult.Error
-    val data = (stations as? ApiResult.Success)?.data ?: emptyList()
+    val isLoading = state.isLoading
+    val isError = state.errorMessage.length > 2
+    val data = state.favoriteStations
     Log.d("","[FavoriteStationList] isLoading : $isLoading, isError : $isError")
 
     LazyRow(
@@ -697,13 +689,13 @@ fun FavoriteStationList(stations: ApiResult<List<StationInfo>>, onClick: (Statio
 
 
 @Composable
-fun BikeStationList(stations: ApiResult<List<StationInfo>>, onClick: (StationInfo) -> Unit) {
+fun BikeStationList(state: BikeState, onClick: (StationInfo) -> Unit) {
     val lazyListState = rememberLazyListState()
 
     // 判斷 loading 狀態
-    val isLoading = stations is ApiResult.Loading
-    val isError = stations is ApiResult.Error
-    val data = (stations as? ApiResult.Success)?.data ?: emptyList()
+    val isLoading = state.isLoading
+    val isError = state.errorMessage.length > 2
+    val data = state.nearFavoriteStations
 
     LazyRow(
         state = lazyListState,
@@ -906,14 +898,14 @@ fun PreviewSearchBarDetails() {
     val result = ApiResult.Success(list)
 
     AppTheme {
-        SearchBarDetail(
-            modifier = Modifier,
-            filterStations = result,
-            onQueryChange = { query ->
-            },
-            onClick = { completeStationInfo -> },
-            false,
-            {})
+//        SearchBarDetail(
+//            modifier = Modifier,
+//            filterStations = result,
+//            onQueryChange = { query ->
+//            },
+//            onClick = { completeStationInfo -> },
+//            false,
+//            {})
     }
 }
 
@@ -951,9 +943,9 @@ fun PreviewHomeMainView() {
     val result = ApiResult.Success(list)
 
     AppTheme {
-        HomeMainView(
-            allFavoriteStations = ApiResult.Success(emptyList()),
-            nearByStations = ApiResult.Error(""), onClick = {}
-        )
+//        HomeMainView(
+//            allFavoriteStations = ApiResult.Success(emptyList()),
+//            nearByStations = ApiResult.Error(""), onClick = {}
+//        )
     }
 }

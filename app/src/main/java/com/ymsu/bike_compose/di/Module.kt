@@ -37,20 +37,7 @@ object Module {
 
     @Provides
     @Singleton
-    fun provideFavoriteRepository(favoriteStationDao: FavoriteStationDao,
-                                  settingsDao: SettingsDao):RoomRepository{
-        return RoomRepository(favoriteStationDao,settingsDao)
-    }
-
-    @Provides
-    @Singleton
     fun provideApiService():BikeApiService{
         return BikeApiService.create()
-    }
-
-    @Provides
-    @Singleton
-    fun provideBikeRepository(apiService: BikeApiService): BikeRepository{
-        return BikeRepository(apiService)
     }
 }

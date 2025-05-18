@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocalParking
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -74,7 +73,6 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.google.maps.android.compose.rememberMarkerState
-import com.ymsu.bike_compose.data.ApiResult
 import com.ymsu.bike_compose.data.StationInfo
 import com.ymsu.bike_compose.data.StationInfoDetail
 import com.ymsu.bike_compose.theme.AppTheme
@@ -92,23 +90,24 @@ import kotlin.math.sqrt
 private const val TAG = "[MapScreen]"
 
 @Composable
-fun MapScreen(viewModel: MainViewModel) {
+fun MapScreen(stateViewModel: StateViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        val mapLatLng by viewModel.mapLatLng.collectAsStateWithLifecycle()
-        val userLatLng by viewModel.userLatLng.collectAsStateWithLifecycle()
+
+        val testState by stateViewModel.state.collectAsStateWithLifecycle()
+        Log.d(TAG,"nearFavoriteStations size = "+testState.nearFavoriteStations.size)
+
+        val mapLatLng by stateViewModel.mapLatLng.collectAsStateWithLifecycle()
+        val userLatLng by stateViewModel.userLatLng.collectAsStateWithLifecycle()
 
         var zoomLevel by remember { mutableFloatStateOf(16f) }
 
         val cameraPositionState = rememberCameraPositionState {
             position = CameraPosition.fromLatLngZoom(mapLatLng, zoomLevel)
         }
-        val circleRange by viewModel.range.collectAsStateWithLifecycle()
-        val nearByStationInfos by viewModel.nearByStationWithFavorite.collectAsStateWithLifecycle()
-        val selectedStationFromHomeScreen by viewModel.selectedStation.collectAsStateWithLifecycle()
 
         LaunchedEffect(mapLatLng) {
             Log.d(TAG, "[MapScreen] LaunchedEffect mapLatLng : ${mapLatLng.toString()}")
@@ -125,27 +124,22 @@ fun MapScreen(viewModel: MainViewModel) {
                     if(!isMoving) {
                         val position = cameraPositionState.position.target
                         Log.d(TAG, "[MapScreen ]cameraPositionState is changed to: ${position.toString()}")
-                        viewModel.updateCurrentLatLng(position.latitude, position.longitude)
+                        stateViewModel.updateCurrentLatLng(position.latitude, position.longitude)
                         zoomLevel = cameraPositionState.position.zoom
                     }
                 }
         }
 
-        val sortedStations = remember(nearByStationInfos) {
-            when (nearByStationInfos) {
-                is ApiResult.Success -> {
-                    val stations = (nearByStationInfos as ApiResult.Success<List<StationInfo>>).data
-                    stations.sortedBy { station ->
-                        calculateDistance(
-                            LatLng(
-                                cameraPositionState.position.target.latitude,
-                                cameraPositionState.position.target.longitude
-                            ),
-                            LatLng(station.stationInfoDetail.lat, station.stationInfoDetail.lng)
-                        )
-                    }
-                }
-                else -> emptyList()
+        val sortedStations = remember(testState.nearFavoriteStations) {
+            val stations = testState.nearFavoriteStations
+            stations.sortedBy { station ->
+                calculateDistance(
+                    LatLng(
+                        cameraPositionState.position.target.latitude,
+                        cameraPositionState.position.target.longitude
+                    ),
+                    LatLng(station.stationInfoDetail.lat, station.stationInfoDetail.lng)
+                )
             }
         }
 
@@ -169,7 +163,7 @@ fun MapScreen(viewModel: MainViewModel) {
                     ),
                     fillColor = Color.LightGray.copy(alpha = 0.5f),
                     strokeColor = Color.LightGray.copy(alpha = 0.5f),
-                    radius = circleRange.toDouble()
+                    radius = testState.range.toDouble()
                 )
 
                 MarkerContents(
@@ -178,10 +172,10 @@ fun MapScreen(viewModel: MainViewModel) {
                         cameraPositionState.position.target.longitude
                     ),
                     sortedStations,
-                    selectedStationFromHomeScreen,
-                    { viewModel.setSelectedStation(null) },
-                    { uid -> viewModel.clickFavorite(uid) },
-                    (circleRange.toDouble()/1000)
+                    testState.selectedStation,
+                    { stateViewModel.setSelectedStation(null) },
+                    { uid -> stateViewModel.clickFavorite(uid) },
+                    (testState.range.toDouble()/1000)
                 )
             }
 
@@ -246,7 +240,7 @@ private fun MarkerContents(
     val markers = remember { mutableStateListOf<StationInfo>() }
 
     val updateKey = remember(sortedLocations) {
-        sortedLocations.joinToString { it.stationInfoDetail.station_uid + it.stationInfoDetail.update_time }
+        sortedLocations.joinToString { it.stationInfoDetail.station_uid + it.stationInfoDetail.update_time + it.isFavorite}
     }
 
     LaunchedEffect(updateKey) {
@@ -257,7 +251,8 @@ private fun MarkerContents(
         sortedLocations.forEach { newStation ->
             val index = markers.indexOfFirst { it.stationInfoDetail.station_uid == newStation.stationInfoDetail.station_uid }
             if (index >= 0) {
-                if (markers[index].stationInfoDetail.update_time != newStation.stationInfoDetail.update_time) {
+                if (markers[index].stationInfoDetail.update_time != newStation.stationInfoDetail.update_time ||
+                    markers[index].isFavorite != newStation.isFavorite) {
                     markers[index] = newStation
                 }
             } else {
@@ -275,6 +270,7 @@ private fun MarkerContents(
                 station.stationInfoDetail.available_bikes + station.stationInfoDetail.available_e_bikes,
                 station.stationInfoDetail.available_return
             )
+
             var markerSize = if (selectedStationInfo?.stationInfoDetail?.station_uid == station.stationInfoDetail.station_uid) 1.3f else 1f
             Marker(
                 state = rememberMarkerState(position = LatLng(station.stationInfoDetail.lat, station.stationInfoDetail.lng)),
@@ -527,7 +523,7 @@ private fun BottomRowContent(
     var isFavorite by remember { mutableStateOf(stationInfo?.isFavorite ?: false)  }
     Log.d(
         TAG,
-        "[BottomRowContent] Create or recompose , isFavorite = ${stationInfo?.isFavorite}"
+        "[BottomRowContent] Create or recompose , uis = isFavorite = ${stationInfo?.isFavorite}"
     )
 
     Row(
